@@ -127,7 +127,7 @@ img {
 
 .hero h1,
 .section-heading h2 {
-  font-family: "Cormorant Garamond", Georgia, serif;
+  font-family: var(--heading-font);
   font-weight: 600;
 }
 
@@ -243,7 +243,7 @@ img {
 }
 
 .coming-title {
-  font-family: "Cormorant Garamond", Georgia, serif;
+  font-family: var(--heading-font);
   font-size: 2rem;
 }
 
@@ -421,9 +421,7 @@ img {
   color: rgba(64, 42, 32, 0.72);
 
   font-family:
-    "Cormorant Garamond",
-    Georgia,
-    serif;
+    var(--heading-font);
 
   font-size: 1.1rem;
 
@@ -487,9 +485,7 @@ img {
 
 .footer-contact-link strong {
   font-family:
-    "Cormorant Garamond",
-    Georgia,
-    serif;
+    var(--heading-font);
 
   font-size: 1.45rem;
 
@@ -939,7 +935,7 @@ img {
 
 .coming-soon-grid-copy h3 {
   margin: 0 0 16px;
-  font-family: "Cormorant Garamond", Georgia, serif;
+  font-family: var(--heading-font);
   font-size: clamp(3rem, 6vw, 5.5rem);
   font-weight: 500;
   line-height: 0.95;
@@ -1223,7 +1219,7 @@ img {
 
 .product-modal-info h2 {
   margin: 0 0 6px;
-  font-family: "Cormorant Garamond", Georgia, serif;
+  font-family: var(--heading-font);
   font-size: clamp(2rem, 3.6vw, 3.1rem);
   font-weight: 500;
   line-height: 1;
@@ -1475,9 +1471,7 @@ body.modal-open {
   margin: 0 0 8px;
 
   font-family:
-    "Cormorant Garamond",
-    Georgia,
-    serif;
+    var(--heading-font);
 
   font-size: 2rem;
 
@@ -1562,9 +1556,7 @@ body.modal-open {
   color: #ffffff;
 
   font-family:
-    "Cormorant Garamond",
-    Georgia,
-    serif;
+    var(--heading-font);
 
   font-size: 1.35rem;
 
@@ -1729,7 +1721,7 @@ body.modal-open {
 
 .promotion-card-body h3 {
   margin: 0;
-  font-family: "Cormorant Garamond", Georgia, serif;
+  font-family: var(--heading-font);
   font-size: clamp(1.5rem, 2.4vw, 2rem);
   font-weight: 600;
   line-height: 1.15;
@@ -1765,5 +1757,210 @@ body.modal-open {
     padding-left: 14px;
     padding-right: 14px;
     font-size: 0.72rem;
+  }
+}
+
+
+/* =========================================================
+   MODERN THEME (2026-11): same Alterego palette, softer look.
+   Rounded cards with light shadows, rounded buttons and chips,
+   brand font Hellony in headings (files in
+   assets/fonts/hellony/, falls back to Cormorant Garamond).
+   ========================================================= */
+
+@font-face {
+  font-family: "Hellony";
+  src:
+    local("Hellony"),
+    local("Hellony Regular"),
+    local("Hellony-Regular"),
+    url("assets/fonts/hellony/Hellony.woff2") format("woff2"),
+    url("assets/fonts/hellony/Hellony.woff") format("woff"),
+    url("assets/fonts/hellony/Hellony.otf") format("opentype"),
+    url("assets/fonts/hellony/Hellony.ttf") format("truetype");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --heading-font: "Hellony", "Cormorant Garamond", Georgia, serif;
+  --brand-brown: #4a2e20;
+  --brand-brown-hover: #5e3b29;
+  --brand-copper: #9c6844;
+  --radius: 18px;
+  --radius-sm: 10px;
+  --shadow-card: 0 1px 2px rgba(74, 46, 32, 0.04), 0 10px 28px rgba(74, 46, 32, 0.07);
+  --shadow-raised: 0 6px 14px rgba(74, 46, 32, 0.08), 0 22px 44px rgba(74, 46, 32, 0.12);
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+}
+
+.site-header {
+  background: rgba(247, 243, 237, 0.88);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.eyebrow {
+  color: var(--brand-copper);
+  font-weight: 600;
+}
+
+/* Buttons */
+.button,
+.modal-buy-button {
+  border-radius: var(--radius-sm);
+  transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.button-dark,
+.modal-buy-button {
+  border-color: var(--brand-brown);
+  background: var(--brand-brown);
+}
+
+.button-dark:hover,
+.modal-buy-button:not(:disabled):hover {
+  color: #ffffff;
+  border-color: var(--brand-brown-hover);
+  background: var(--brand-brown-hover);
+  box-shadow: 0 8px 18px rgba(74, 46, 32, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Product cards */
+.product-grid {
+  gap: 28px 22px;
+}
+
+.product-card {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(74, 46, 32, 0.07);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.product-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-raised);
+}
+
+.product-media {
+  border-radius: 0;
+}
+
+.product-info {
+  flex: 1;
+  padding: 14px 16px 18px;
+}
+
+.product-info h3 {
+  color: var(--brand-brown);
+  font-weight: 600;
+}
+
+.product-card[data-new="true"]::before {
+  border-radius: 999px;
+  padding: 6px 10px;
+}
+
+.size-chip {
+  border-radius: 8px;
+}
+
+/* Promotions */
+.promotion-card {
+  border-radius: var(--radius);
+  border-color: rgba(74, 46, 32, 0.07);
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+/* Benefits strip */
+.benefits {
+  background: transparent;
+}
+
+.benefit {
+  padding: 18px 20px;
+  border: 1px solid rgba(74, 46, 32, 0.07);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: var(--shadow-card);
+}
+
+.benefit-icon {
+  border: 0;
+  border-radius: 12px;
+  background: rgba(156, 104, 68, 0.12);
+  color: var(--brand-copper);
+}
+
+/* Product window */
+.product-modal-dialog {
+  border-radius: 22px;
+}
+
+.modal-main-image,
+.modal-main-image img {
+  border-radius: 14px;
+}
+
+
+/* Product window controls */
+.modal-size-button {
+  border-radius: 10px;
+}
+
+.modal-size-button.is-selected {
+  border-color: var(--brand-brown);
+  background: var(--brand-brown);
+  color: #ffffff;
+}
+
+.modal-purchase-mode {
+  gap: 4px;
+  padding: 4px;
+  border-color: rgba(74, 46, 32, 0.12);
+  border-radius: 12px;
+  background: #f6f1ea;
+}
+
+.modal-purchase-mode button {
+  border-radius: 9px;
+  background: transparent;
+}
+
+.modal-purchase-mode button.is-selected {
+  background: var(--brand-brown);
+  box-shadow: 0 4px 10px rgba(74, 46, 32, 0.18);
+}
+
+@media (max-width: 640px) {
+  .product-grid {
+    gap: 14px 12px;
+  }
+
+  .product-info {
+    padding: 12px 12px 14px;
+  }
+
+  .product-card {
+    border-radius: 14px;
+  }
+
+  .benefit {
+    padding: 14px 16px;
+  }
+
+  .product-modal-dialog {
+    border-radius: 20px 20px 0 0;
   }
 }

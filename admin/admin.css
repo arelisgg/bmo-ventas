@@ -216,9 +216,7 @@ textarea {
     margin: 0;
 
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size:
         clamp(2.7rem,
@@ -442,9 +440,7 @@ textarea {
         0 0 8px;
 
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size: 2rem;
 
@@ -489,9 +485,7 @@ textarea {
         0 0 5px;
 
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size: 1.8rem;
 
@@ -860,7 +854,7 @@ textarea {
 
 .admin-content>h1 {
     margin: 0 0 12px;
-    font-family: "Cormorant Garamond", Georgia, serif;
+    font-family: var(--heading-font);
     font-size: clamp(2.8rem, 5vw, 4rem);
     font-weight: 500;
     line-height: 0.95;
@@ -896,7 +890,7 @@ textarea {
 
 .dashboard-card h2 {
     margin: 0 0 10px;
-    font-family: "Cormorant Garamond", Georgia, serif;
+    font-family: var(--heading-font);
     font-size: 2rem;
     font-weight: 500;
 }
@@ -1141,9 +1135,7 @@ textarea {
     margin: 0 0 3px;
 
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size: 1.65rem;
     font-weight: 500;
@@ -1186,9 +1178,7 @@ textarea {
 
 .inventory-total strong {
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size: 1.65rem;
 
@@ -1684,9 +1674,7 @@ textarea {
         12px 0 16px;
 
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size: 3rem;
 
@@ -1775,9 +1763,7 @@ textarea {
         4px 0 0;
 
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size: 1.7rem;
 
@@ -2161,9 +2147,7 @@ textarea {
         auto 0 6px;
 
     font-family:
-        "Cormorant Garamond",
-        Georgia,
-        serif;
+        var(--heading-font);
 
     font-size: 1.4rem;
 
@@ -7173,5 +7157,512 @@ table.admin-table tbody tr[hidden] {
 
     .backups-help {
         padding-left: 36px;
+    }
+}
+
+
+/* =========================================================
+   MODERN THEME (2026-11)
+   Same Alterego palette (sand, brown, copper), softer and more
+   current: rounded cards with light shadows, menu with icons,
+   metric cards with icons, rounded buttons and fields.
+   Headings use the brand font Hellony. Put the font files in
+   assets/fonts/hellony/ (Hellony.woff2, .woff, .otf or .ttf); if
+   they are missing, a computer with Hellony installed uses it
+   and the rest fall back to Cormorant Garamond.
+   ========================================================= */
+
+@font-face {
+    font-family: "Hellony";
+    src:
+        local("Hellony"),
+        local("Hellony Regular"),
+        local("Hellony-Regular"),
+        url("../assets/fonts/hellony/Hellony.woff2") format("woff2"),
+        url("../assets/fonts/hellony/Hellony.woff") format("woff"),
+        url("../assets/fonts/hellony/Hellony.otf") format("opentype"),
+        url("../assets/fonts/hellony/Hellony.ttf") format("truetype");
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    --heading-font: "Hellony", "Cormorant Garamond", Georgia, serif;
+
+    --admin-bg: #f6f1ea;
+    --admin-surface: #ffffff;
+    --admin-sidebar: #ffffff;
+    --admin-text: #2b211b;
+    --admin-muted: #85776c;
+    --admin-border: rgba(74, 46, 32, 0.09);
+
+    --brand-brown: #4a2e20;
+    --brand-brown-hover: #5e3b29;
+    --brand-copper: #9c6844;
+    --brand-copper-soft: rgba(156, 104, 68, 0.12);
+    --brand-sand: #f3ece3;
+    --admin-accent: var(--brand-brown);
+
+    --radius: 16px;
+    --radius-sm: 10px;
+    --shadow-card: 0 1px 2px rgba(74, 46, 32, 0.04), 0 8px 24px rgba(74, 46, 32, 0.06);
+    --shadow-raised: 0 4px 10px rgba(74, 46, 32, 0.06), 0 16px 36px rgba(74, 46, 32, 0.1);
+}
+
+body {
+    background: var(--admin-bg);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- Header ---------- */
+
+.admin-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    min-height: 72px;
+    border-bottom: 1px solid var(--admin-border);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: blur(8px);
+    box-shadow: 0 1px 0 rgba(74, 46, 32, 0.02);
+}
+
+.admin-user span {
+    font-weight: 500;
+}
+
+.logout-button {
+    padding: 8px 14px;
+    border: 1px solid var(--admin-border);
+    border-radius: 999px;
+    background: var(--brand-sand);
+    color: var(--brand-brown);
+    font-weight: 500;
+    transition: background 0.2s ease, color 0.2s ease;
+}
+
+.logout-button:hover {
+    background: var(--brand-brown);
+    color: #ffffff;
+}
+
+/* ---------- Sidebar ---------- */
+
+.admin-layout {
+    grid-template-columns: 250px minmax(0, 1fr);
+}
+
+.sidebar {
+    padding: 26px 16px;
+    border-right: 1px solid var(--admin-border);
+    background: var(--admin-sidebar);
+}
+
+.sidebar-title {
+    padding: 0 12px;
+    color: #a3958a;
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+}
+
+.sidebar-nav {
+    gap: 3px;
+}
+
+.sidebar-nav a {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: var(--radius-sm);
+    color: #5d5048;
+    font-size: 0.84rem;
+    font-weight: 500;
+    transition: background 0.18s ease, color 0.18s ease;
+}
+
+.sidebar-nav a .admin-icon {
+    flex-shrink: 0;
+    color: #a08a7a;
+    transition: color 0.18s ease;
+}
+
+.sidebar-nav a:hover {
+    background: var(--brand-sand);
+    color: var(--brand-brown);
+}
+
+.sidebar-nav a:hover .admin-icon {
+    color: var(--brand-copper);
+}
+
+.sidebar-nav a.active {
+    background: var(--brand-copper-soft);
+    color: var(--brand-brown);
+    font-weight: 600;
+}
+
+.sidebar-nav a.active .admin-icon {
+    color: var(--brand-copper);
+}
+
+.sidebar-nav a.active::before {
+    content: "";
+    position: absolute;
+    left: -16px;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--brand-copper);
+}
+
+.sidebar-nav a[target="_blank"] {
+    margin-top: 10px;
+    border-top: 1px solid var(--admin-border);
+    border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+    padding-top: 16px;
+}
+
+/* ---------- Page heading ---------- */
+
+.page-eyebrow {
+    color: var(--brand-copper);
+    font-weight: 600;
+}
+
+.page-title {
+    color: var(--brand-brown);
+    font-size: clamp(2.3rem, 4vw, 3.3rem);
+    line-height: 1.05;
+}
+
+/* ---------- Cards ---------- */
+
+.dashboard-panel,
+.dashboard-card,
+.dashboard-stat-card,
+.form-section,
+.empty-state,
+.inventory-product-card,
+.product-order-bar,
+.sales-filters,
+.admin-table-wrapper,
+.sales-table-wrapper {
+    border: 1px solid var(--admin-border);
+    border-radius: var(--radius);
+    background: var(--admin-surface);
+    box-shadow: var(--shadow-card);
+}
+
+.dashboard-panel,
+.inventory-product-card,
+.admin-table-wrapper,
+.sales-table-wrapper {
+    overflow: hidden;
+}
+
+.dashboard-panel .admin-table-wrapper,
+.dashboard-panel .dashboard-table-wrapper,
+.dashboard-panel .sales-table-wrapper {
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.dashboard-panel-header {
+    border-bottom-color: var(--admin-border);
+}
+
+.dashboard-panel-header h2,
+.form-section-header h2 {
+    color: var(--brand-brown);
+}
+
+.color-block,
+.sale-doc-type,
+.sale-size-chip,
+.sale-product-trigger,
+.sale-offer,
+.checkbox-row,
+.checkbox-label {
+    border-radius: 12px;
+}
+
+.color-block {
+    border-color: var(--admin-border);
+    background: #fbf8f4;
+}
+
+/* ---------- Metric cards ---------- */
+
+.dashboard-stat-grid {
+    gap: 20px;
+}
+
+.dashboard-stat-card {
+    position: relative;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.dashboard-stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-raised);
+}
+
+.dashboard-stat-icon {
+    display: grid;
+    align-self: flex-start;
+    margin-bottom: 16px;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--brand-copper-soft);
+    color: var(--brand-copper);
+}
+
+.dashboard-stat-icon .admin-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.dashboard-stat-card-alert .dashboard-stat-icon {
+    background: #f7ead9;
+    color: #b07225;
+}
+
+.dashboard-stat-card-empty .dashboard-stat-icon {
+    background: var(--error-bg);
+    color: var(--error-text);
+}
+
+.dashboard-stat-card-check .dashboard-stat-icon,
+.dashboard-stat-card-value .dashboard-stat-icon {
+    background: var(--success-bg);
+    color: var(--success-text);
+}
+
+.dashboard-stat-card-sales .dashboard-stat-icon,
+.dashboard-stat-card-inventory .dashboard-stat-icon {
+    background: var(--brand-brown);
+    color: #f3e4d4;
+}
+
+.dashboard-stat-label {
+    color: var(--admin-muted);
+    font-weight: 600;
+}
+
+.dashboard-stat-value,
+.dashboard-stat-value.dashboard-stat-money {
+    color: var(--brand-brown);
+    font-family: "Inter", Arial, sans-serif;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+}
+
+.dashboard-stat-value {
+    font-size: 2rem;
+}
+
+.dashboard-stat-value.dashboard-stat-money {
+    font-size: clamp(1.3rem, 12cqi, 1.9rem);
+}
+
+.dashboard-stat-card a {
+    color: var(--brand-copper);
+    font-weight: 500;
+}
+
+/* ---------- Buttons ---------- */
+
+.admin-button {
+    border-color: var(--brand-brown);
+    border-radius: var(--radius-sm);
+    background: var(--brand-brown);
+    font-weight: 600;
+    transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.admin-button:hover {
+    border-color: var(--brand-brown-hover);
+    background: var(--brand-brown-hover);
+    box-shadow: 0 6px 16px rgba(74, 46, 32, 0.18);
+}
+
+.admin-button-outline {
+    border-color: rgba(74, 46, 32, 0.35);
+    background: transparent;
+    color: var(--brand-brown);
+}
+
+.admin-button-outline:hover {
+    border-color: var(--brand-brown);
+    background: var(--brand-brown);
+    color: #ffffff;
+}
+
+/* ---------- Fields ---------- */
+
+.form-input,
+.form-select,
+.form-textarea,
+.sale-product-trigger,
+.sale-product-search input,
+.sale-source-select,
+.stock-item input,
+.inventory-stock-input,
+.admin-content input[type="text"],
+.admin-content input[type="number"],
+.admin-content input[type="email"],
+.admin-content input[type="password"],
+.admin-content input[type="date"],
+.admin-content input[type="datetime-local"],
+.admin-content select,
+.admin-content textarea {
+    border-color: #e4d9ce;
+    border-radius: var(--radius-sm);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.admin-content input[type="checkbox"],
+.admin-content input[type="radio"] {
+    accent-color: var(--brand-copper);
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus,
+.admin-content input:focus,
+.admin-content select:focus,
+.admin-content textarea:focus {
+    border-color: var(--brand-copper);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(156, 104, 68, 0.16);
+}
+
+.form-label {
+    color: #5d5048;
+}
+
+/* ---------- Tables ---------- */
+
+.admin-table thead th,
+.dashboard-table thead th {
+    background: #fbf8f4;
+    color: #8f7f72;
+}
+
+.admin-table tbody tr,
+.dashboard-table tbody tr {
+    transition: background 0.15s ease;
+}
+
+.admin-table tbody tr:hover,
+.dashboard-table tbody tr:hover {
+    background: #fcfaf7;
+}
+
+/* ---------- Badges, notices ---------- */
+
+.status-badge {
+    border-radius: 999px;
+    padding-inline: 10px;
+}
+
+.admin-notice {
+    border-radius: 12px;
+}
+
+.inventory-save-bar {
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-raised);
+}
+
+/* ---------- Phones ---------- */
+
+@media (max-width: 900px) {
+    .admin-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .admin-header {
+        min-height: 64px;
+    }
+
+    .admin-menu-toggle {
+        border-radius: var(--radius-sm);
+    }
+
+    .admin-layout .sidebar {
+        border-right: 0;
+        border-radius: 0 var(--radius) var(--radius) 0;
+    }
+
+    .sidebar-nav a.active::before {
+        left: -18px;
+    }
+}
+
+@media (max-width: 700px) {
+    .admin-table-wrapper,
+    .sales-table-wrapper {
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    table.admin-table tbody tr {
+        border-radius: 14px;
+        box-shadow: var(--shadow-card);
+        overflow: hidden;
+    }
+
+    .dashboard-stat-grid,
+    .finance-stat-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .dashboard-stat-card {
+        min-height: 0;
+        padding: 16px;
+    }
+
+    .dashboard-stat-grid > .dashboard-stat-card:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+    }
+
+    .dashboard-stat-icon {
+        width: 36px;
+        height: 36px;
+        margin-bottom: 12px;
+        border-radius: 10px;
+    }
+
+    .dashboard-stat-icon .admin-icon {
+        width: 18px;
+        height: 18px;
+    }
+
+    .dashboard-stat-label {
+        font-size: 0.58rem;
+    }
+
+    .dashboard-stat-value {
+        font-size: 1.6rem;
+    }
+
+    .admin-content .dashboard-stat-grid .dashboard-stat-value {
+        font-size: clamp(0.95rem, 12.5cqi, 1.6rem);
+        white-space: nowrap;
+    }
+
+    .dashboard-stat-card a,
+    .dashboard-stat-note {
+        font-size: 0.66rem;
     }
 }

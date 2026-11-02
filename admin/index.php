@@ -375,43 +375,44 @@ $base = e(APP_BASE_URL);
 $statCards = [];
 
 if ($salesReady && admin_can('sales')) {
-    $statCards[] = ['Ventas de hoy', format_money($salesStatistics['today_total']), true,
+    $statCards[] = ['clock', 'Ventas de hoy', format_money($salesStatistics['today_total']), true,
         (int) $salesStatistics['today_count'] . ' venta(s)', null];
-    $statCards[] = ['Ventas de la semana', format_money($salesStatistics['week_total']), true,
+    $statCards[] = ['calendar', 'Ventas de la semana', format_money($salesStatistics['week_total']), true,
         (int) $salesStatistics['week_count'] . ' venta(s) desde el lunes', null];
-    $statCards[] = ['Ventas del mes', format_money($salesStatistics['month_total']), true,
+    $statCards[] = ['sales', 'Ventas del mes', format_money($salesStatistics['month_total']), true,
         (int) $salesStatistics['month_count'] . ' venta(s) · Ver ventas →', $base . '/admin/sales/'];
-    $statCards[] = ['Pendiente de cobro', format_money($salesStatistics['pending_total']), true,
+    $statCards[] = ['cash', 'Pendiente de cobro', format_money($salesStatistics['pending_total']), true,
         (int) $salesStatistics['pending_count'] > 0
             ? (int) $salesStatistics['pending_count'] . ' venta(s) · Ver pendientes →'
             : 'Nada pendiente',
         (int) $salesStatistics['pending_count'] > 0 ? $base . '/admin/sales/?status=pending&amp;from=2000-01-01' : null];
 }
 
-$statCards[] = ['Modelos', (string) (int) $statistics['total_products'], false,
+$statCards[] = ['products', 'Modelos', (string) (int) $statistics['total_products'], false,
     'Administrar modelos →', $base . '/admin/products/'];
-$statCards[] = ['Modelos activos', (string) (int) $statistics['active_products'], false,
+$statCards[] = ['check', 'Modelos activos', (string) (int) $statistics['active_products'], false,
     'Visibles en el catálogo', null];
-$statCards[] = ['Categorías', (string) (int) $statistics['active_categories'], false,
+$statCards[] = ['categories', 'Categorías', (string) (int) $statistics['active_categories'], false,
     admin_can('categories') ? 'Administrar categorías →' : 'Activas en el catálogo',
     admin_can('categories') ? $base . '/admin/categories/' : null];
 
 if ($promotionsReady) {
-    $statCards[] = ['Promociones vigentes', (string) $currentPromotions, false,
+    $statCards[] = ['promotions', 'Promociones vigentes', (string) $currentPromotions, false,
         'Administrar promociones →', $base . '/admin/promotions/'];
 }
 
-$statCards[] = ['Pares en stock', (string) (int) $statistics['total_stock'], false,
+$statCards[] = ['inventory', 'Pares en stock', (string) (int) $statistics['total_stock'], false,
     'Ver inventario →', $base . '/admin/inventory/'];
-$statCards[] = ['Valor del inventario', format_money($statistics['stock_value']), true,
+$statCards[] = ['value', 'Valor del inventario', format_money($statistics['stock_value']), true,
     'Pares en stock × precio de venta', null];
-$statCards[] = ['Stock bajo', (string) count($lowStockProducts), false,
+$statCards[] = ['alert', 'Stock bajo', (string) count($lowStockProducts), false,
     'Modelos con 1 a 5 pares', null];
-$statCards[] = ['Agotados', (string) count($outOfStockProducts), false,
+$statCards[] = ['empty', 'Agotados', (string) count($outOfStockProducts), false,
     'Modelos activos sin pares', null];
 ?>
-<?php foreach ($statCards as [$label, $value, $isMoney, $note, $link]): ?>
-                <article class="dashboard-stat-card">
+<?php foreach ($statCards as [$icon, $label, $value, $isMoney, $note, $link]): ?>
+                <article class="dashboard-stat-card dashboard-stat-card-<?= e($icon) ?>">
+                    <span class="dashboard-stat-icon"><?= admin_icon($icon) ?></span>
                     <span class="dashboard-stat-label"><?= e($label) ?></span>
                     <strong class="dashboard-stat-value<?= $isMoney ? ' dashboard-stat-money' : '' ?>"><?= e($value) ?></strong>
 <?php if ($link !== null): ?>
