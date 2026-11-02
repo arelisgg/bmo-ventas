@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/sales-functions.php';
 require_once __DIR__ . '/../../includes/finance-functions.php';
+require_once __DIR__ . '/../../includes/payment-functions.php';
 
 require_admin();
 
@@ -27,7 +28,7 @@ $action = $_POST['action'] ?? '';
 if (
     $saleId === false ||
     !verify_csrf_token($_POST['csrf_token'] ?? null) ||
-    !in_array($action, ['mark_paid', 'cancel', 'to_invoice'], true)
+    !in_array($action, ['mark_paid', 'cancel', 'to_invoice', 'add_payment', 'delete_payment'], true)
 ) {
     header('Location: ' . $salesUrl);
     exit;
@@ -39,7 +40,7 @@ try {
     $pdo->beginTransaction();
 
     $saleStatement = $pdo->prepare(
-        'SELECT id, status, doc_type
+        'SELECT id, status, doc_type, payment_method
          FROM sales
          WHERE id = :id
          FOR UPDATE'
@@ -58,8 +59,59 @@ try {
         exit;
     }
 
+    /*
+    |--------------------------------------------------------------------------
+    | Payments: add an abono / part of a mixed payment, or remove one
+    |--------------------------------------------------------------------------
+    */
+
+    if ($action === 'add_payment' || $action === 'delete_payment') {
+        if (!payment_tables_exist($pdo) || $sale['status'] === 'cancelled' || $sale['doc_type'] !== 'invoice') {
+            $pdo->rollBack();
+
+            header('Location: ' . $viewUrl);
+            exit;
+        }
+
+        if ($action === 'add_payment') {
+            $amount = parse_money_input($_POST['amount'] ?? '');
+
+            if ($amount === null || $amount <= 0) {
+                throw new DomainException('Escribe un monto válido.');
+            }
+
+            add_sale_payment(
+                $pdo,
+                $saleId,
+                (string) ($_POST['method'] ?? ''),
+                $amount,
+                trim((string) ($_POST['note'] ?? ''))
+            );
+        } else {
+            if (!admin_is_owner()) {
+                $pdo->rollBack();
+
+                header('Location: ' . $viewUrl);
+                exit;
+            }
+
+            delete_sale_payment($pdo, $saleId, (int) ($_POST['payment_id'] ?? 0));
+        }
+
+        sync_sale_payment_status($pdo, $saleId);
+
+        $pdo->commit();
+
+        header('Location: ' . $viewUrl . ($action === 'add_payment' ? '&payment=1' : '&payment_deleted=1'));
+        exit;
+    }
+
     if ($action === 'mark_paid') {
         if ($sale['status'] === 'pending') {
+            if (payment_tables_exist($pdo)) {
+                settle_sale_balance($pdo, $saleId, (string) $sale['payment_method']);
+            }
+
             $pdo->prepare(
                 'UPDATE sales
                  SET status = \'paid\'
@@ -97,6 +149,10 @@ try {
             ]);
 
             fill_sale_item_costs($pdo, $saleId);
+
+            if ($sale['status'] === 'paid' && payment_tables_exist($pdo)) {
+                settle_sale_balance($pdo, $saleId, (string) $sale['payment_method']);
+            }
         }
 
         $pdo->commit();
@@ -134,6 +190,11 @@ try {
 } catch (DomainException $exception) {
     if ($pdo->inTransaction()) {
         $pdo->rollBack();
+    }
+
+    if ($action === 'add_payment') {
+        header('Location: ' . $viewUrl . '&payment_error=' . rawurlencode($exception->getMessage()));
+        exit;
     }
 
     header('Location: ' . $viewUrl . '&nostock=1');

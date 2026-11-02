@@ -1,18 +1,12 @@
 -- AlteRego demo database: sample data to show the system.
--- Import it in phpMyAdmin (Importar). It creates its own database, bmo_ventas_demo,
--- and never touches bmo_ventas. Importing it again resets the demo.
--- Demo login: demo@demo.com / demo1234
+-- Import it in phpMyAdmin (Importar) with the demo database selected,
+-- never on a store's real database. Importing it again resets the demo.
+-- Demo login: demo@demo.com / demo1234 (config/local.php must set $demoDbName).
 
 SET NAMES utf8mb4;
 
-CREATE DATABASE IF NOT EXISTS bmo_ventas_demo
-CHARACTER SET utf8mb4
-COLLATE utf8mb4_unicode_ci;
-
-USE bmo_ventas_demo;
-
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS workshop_order_lines, workshop_order_models, workshop_orders, sale_items, sales, expenses, product_images, product_variants, products, categories, admins, schema_migrations;
+DROP TABLE IF EXISTS cash_movements, sale_payments, cash_sessions, workshop_order_lines, workshop_order_models, workshop_orders, sale_items, sales, expenses, product_images, product_variants, products, categories, admins, schema_migrations;
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

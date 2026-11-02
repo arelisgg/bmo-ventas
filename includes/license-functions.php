@@ -119,6 +119,15 @@ function license_status(): array
 {
     static $status = null;
 
+    // The demo shows every module without a license.
+    if ($status === null && defined('APP_DEMO_MODE') && APP_DEMO_MODE) {
+        $status = [
+            'valid' => true,
+            'message' => 'Demo con todos los módulos.',
+            'license' => ['customer' => 'Demo', 'modules' => array_keys(license_modules())],
+        ];
+    }
+
     return $status ??= check_license_key(setting('license_key'));
 }
 

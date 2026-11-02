@@ -472,20 +472,38 @@ function save_made_to_order_product(PDO $pdo, array $item): array
     ];
 }
 
+/*
+| Models that can be sold 'por encargo': every catalog model (with or
+| without stock) plus the products created by earlier encargos.
+| is_previous_order = 1 marks the ones that were already ordered.
+*/
 function made_to_order_products(PDO $pdo): array
 {
     return $pdo->query(
-        'SELECT p.*
+        'SELECT
+            p.*,
+            c.name AS category_name,
+            EXISTS (
+                SELECT 1
+                FROM sale_items si
+                WHERE
+                    si.product_id = p.id
+                    AND si.source = \'workshop\'
+            ) AS is_previous_order,
+            (
+                SELECT COALESCE(SUM(pv.stock), 0)
+                FROM product_variants pv
+                WHERE pv.product_id = p.id
+            ) AS stock_total
          FROM products p
-         WHERE EXISTS (
-            SELECT 1
-            FROM sale_items si
-            WHERE
-                si.product_id = p.id
-                AND si.source = \'workshop\'
-         )
-         ORDER BY p.created_at DESC, p.id DESC
-         LIMIT 300'
+         LEFT JOIN categories c
+            ON c.id = p.category_id
+         ORDER BY
+            c.sort_order IS NULL ASC,
+            c.sort_order ASC,
+            c.name ASC,
+            p.name ASC
+         LIMIT 1000'
     )->fetchAll();
 }
 /*

@@ -17,18 +17,30 @@ $statement = $pdo->query(
         c.is_active,
         c.is_coming_soon,
         c.sort_order,
-        COUNT(p.id) AS product_count
+        (
+            SELECT COUNT(*)
+            FROM products p
+            WHERE p.category_id = c.id
+        ) AS product_count,
+        (
+            SELECT COALESCE(SUM(pv.stock), 0)
+            FROM product_variants pv
+            INNER JOIN products p
+                ON p.id = pv.product_id
+            WHERE
+                p.category_id = c.id
+                AND pv.stock > 0
+        ) AS stock_units,
+        (
+            SELECT COUNT(DISTINCT pv.product_id)
+            FROM product_variants pv
+            INNER JOIN products p
+                ON p.id = pv.product_id
+            WHERE
+                p.category_id = c.id
+                AND pv.stock > 0
+        ) AS models_in_stock
      FROM categories c
-     LEFT JOIN products p
-        ON p.category_id = c.id
-     GROUP BY
-        c.id,
-        c.name,
-        c.slug,
-        c.image,
-        c.is_active,
-        c.is_coming_soon,
-        c.sort_order
      ORDER BY
         c.sort_order ASC,
         c.name ASC'
@@ -186,7 +198,11 @@ $categories = $statement->fetchAll();
                             </th>
 
                             <th>
-                                Productos
+                                Modelos
+                            </th>
+
+                            <th>
+                                En stock
                             </th>
 
                             <th>
@@ -267,6 +283,25 @@ $categories = $statement->fetchAll();
                                             'product_count'
                                         ]
                                         ?>
+
+                                </td>
+
+
+                                <td>
+
+                                    <div class="product-name">
+
+                                        <?= (int) $category['stock_units'] ?>
+                                        <?= (int) $category['stock_units'] === 1 ? 'unidad' : 'unidades' ?>
+
+                                    </div>
+
+                                    <div class="product-code">
+
+                                        <?= (int) $category['models_in_stock'] ?>
+                                        <?= (int) $category['models_in_stock'] === 1 ? 'modelo con stock' : 'modelos con stock' ?>
+
+                                    </div>
 
                                 </td>
 
@@ -419,4 +454,4 @@ $categories = $statement->fetchAll();
 
 </body>
 
-</html>
+</html>

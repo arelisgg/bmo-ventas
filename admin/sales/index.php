@@ -231,7 +231,7 @@ render_sales_layout_start('Ventas');
     <div class="dashboard-stat-grid">
         <article class="dashboard-stat-card">
             <span class="dashboard-stat-label">Total vendido</span>
-            <strong class="dashboard-stat-value"><?= e(format_money($summary['revenue'])) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(format_money($summary['revenue'])) ?></strong>
             <span class="dashboard-stat-note">Solo facturas, sin contar canceladas</span>
         </article>
         <article class="dashboard-stat-card">
@@ -241,12 +241,12 @@ render_sales_layout_start('Ventas');
         </article>
         <article class="dashboard-stat-card">
             <span class="dashboard-stat-label">Ticket promedio</span>
-            <strong class="dashboard-stat-value"><?= e(format_money($averageTicket)) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(format_money($averageTicket)) ?></strong>
             <span class="dashboard-stat-note">Por venta</span>
         </article>
         <article class="dashboard-stat-card">
             <span class="dashboard-stat-label">Pendiente de cobro</span>
-            <strong class="dashboard-stat-value"><?= e(format_money($summary['pending_amount'])) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(format_money($summary['pending_amount'])) ?></strong>
             <a href="?<?= e(http_build_query(['status' => 'pending'] + $filters)) ?>">Ver pendientes →</a>
         </article>
     </div>

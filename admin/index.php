@@ -336,7 +336,7 @@ $lowStockVariants =
                     <span class="dashboard-stat-label">
                         Ventas de hoy
                     </span>
-                    <strong class="dashboard-stat-value">
+                    <strong class="dashboard-stat-value dashboard-stat-money">
                         <?= e(format_money($salesStatistics['today_total'])) ?>
                     </strong>
                     <span class="dashboard-stat-note">
@@ -347,7 +347,7 @@ $lowStockVariants =
                     <span class="dashboard-stat-label">
                         Ventas del mes
                     </span>
-                    <strong class="dashboard-stat-value">
+                    <strong class="dashboard-stat-value dashboard-stat-money">
                         <?= e(format_money($salesStatistics['month_total'])) ?>
                     </strong>
                     <a href="<?= e(APP_BASE_URL) ?>/admin/sales/">
@@ -359,7 +359,7 @@ $lowStockVariants =
                     <span class="dashboard-stat-label">
                         Pendiente de cobro
                     </span>
-                    <strong class="dashboard-stat-value">
+                    <strong class="dashboard-stat-value dashboard-stat-money">
                         <?= e(format_money($salesStatistics['pending_total'])) ?>
                     </strong>
                     <a href="<?= e(APP_BASE_URL) ?>/admin/sales/?status=pending&amp;from=2000-01-01">

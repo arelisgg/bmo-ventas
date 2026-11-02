@@ -89,6 +89,48 @@ function require_admin(): void
     if (!admin_can(current_admin_section())) {
         deny_admin_section();
     }
+
+    block_demo_changes();
+}
+
+
+/*
+|--------------------------------------------------------------------------
+| Read-only Demo
+|--------------------------------------------------------------------------
+|
+| The demo user sees every page and module but saves nothing: the forms
+| are shown locked (admin-nav.php) and any form sent anyway goes back to
+| its page with a notice. Only "Actualizar base de datos" works, so a
+| reset demo can be updated.
+|
+*/
+
+function block_demo_changes(): void
+{
+    if (!defined('APP_DEMO_MODE') || !APP_DEMO_MODE || ($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+        return;
+    }
+
+    if (current_admin_section() === 'settings' && ($_POST['action'] ?? '') === 'migrate') {
+        return;
+    }
+
+    $back = APP_BASE_URL . '/admin/';
+    $referer = (string) ($_SERVER['HTTP_REFERER'] ?? '');
+
+    $refererHost = (string) parse_url($referer, PHP_URL_HOST) .
+        (parse_url($referer, PHP_URL_PORT) ? ':' . parse_url($referer, PHP_URL_PORT) : '');
+
+    if ($referer !== '' && $refererHost === ($_SERVER['HTTP_HOST'] ?? '')) {
+        // Same page, keeping only its record id (not "saved" notices).
+        parse_str((string) parse_url($referer, PHP_URL_QUERY), $query);
+        $back = (string) parse_url($referer, PHP_URL_PATH);
+        $back .= isset($query['id']) && is_scalar($query['id']) ? '?id=' . rawurlencode((string) $query['id']) : '';
+    }
+
+    header('Location: ' . $back . (str_contains($back, '?') ? '&' : '?') . 'demo_readonly=1');
+    exit;
 }
 
 
@@ -118,7 +160,7 @@ function admin_role_sections(): array
 {
     return [
         'owner' => ['*'],
-        'seller' => ['dashboard', 'products', 'inventory', 'sales', 'workshop'],
+        'seller' => ['dashboard', 'products', 'inventory', 'sales', 'cash', 'workshop'],
         'warehouse' => ['dashboard', 'products', 'categories', 'inventory', 'workshop'],
     ];
 }
@@ -202,7 +244,7 @@ function current_admin_section(): string
     return 'dashboard';
 }
 
-function deny_admin_section(): never
+function deny_admin_section(): void
 {
     http_response_code(403);
     ?>

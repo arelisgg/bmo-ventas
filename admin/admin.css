@@ -5301,7 +5301,8 @@ textarea {
 }
 
 .sale-custom-fields[hidden],
-.sale-product-picker[hidden] {
+.sale-product-picker[hidden],
+.sale-product-option[hidden] {
     display: none;
 }
 
@@ -6547,4 +6548,171 @@ table.admin-table tbody tr[hidden] {
     font-size: 0.75rem;
 
     word-break: break-all;
+}
+
+
+/* =========================================================
+   SALE PAYMENTS + CASH REGISTER
+   ========================================================= */
+
+.sale-payment-list {
+    margin: 0 0 8px;
+    padding: 0;
+    list-style: none;
+}
+
+.sale-payment-list li {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 7px 0;
+    border-bottom: 1px dashed var(--admin-border);
+    font-size: 0.78rem;
+}
+
+.sale-payment-meta {
+    display: block;
+    color: var(--admin-muted);
+    font-size: 0.7rem;
+}
+
+.sale-payment-delete {
+    border: 0;
+    background: none;
+    color: var(--error-text);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.sale-payment-form {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.sale-payment-fields {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.cash-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 20px;
+}
+
+.cash-form {
+    display: grid;
+    gap: 12px;
+    padding: 0 22px 22px;
+}
+
+.cash-form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+.cash-summary {
+    margin: 0;
+    padding: 0 22px 18px;
+}
+
+.cash-summary div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--admin-border);
+    font-size: 0.82rem;
+}
+
+.cash-summary dt {
+    color: var(--admin-muted);
+}
+
+.cash-summary dd {
+    margin: 0;
+    font-weight: 600;
+}
+
+.cash-summary .cash-summary-total {
+    border-bottom: 0;
+    font-size: 0.95rem;
+}
+
+.cash-difference-short {
+    color: var(--error-text);
+}
+
+.cash-difference-over {
+    color: var(--success-text);
+}
+
+.cash-empty {
+    padding: 0 22px 22px;
+    color: var(--admin-muted);
+    font-size: 0.82rem;
+}
+
+@media print {
+    .admin-header,
+    .sidebar,
+    .cash-no-print {
+        display: none !important;
+    }
+
+    .admin-layout,
+    .admin-content {
+        display: block;
+        padding: 0;
+    }
+}
+
+
+.admin-demo-toast {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    z-index: 950;
+    max-width: calc(100% - 32px);
+    padding: 12px 18px;
+    border-radius: 10px;
+    background: #b5651d;
+    box-shadow: 0 6px 18px rgba(29, 26, 24, 0.22);
+    color: #ffffff;
+    font-size: 0.82rem;
+    text-align: center;
+    transform: translateX(-50%);
+    animation: admin-demo-toast 6s forwards;
+}
+
+@keyframes admin-demo-toast {
+    0%, 85% { opacity: 1; }
+    100% { opacity: 0; visibility: hidden; }
+}
+
+
+/* Long amounts (C$36,640.00) shrink to fit their stat card. */
+.dashboard-stat-card {
+    min-width: 0;
+    container-type: inline-size;
+}
+
+.dashboard-stat-money {
+    font-size: clamp(1.6rem, 19cqi, 3rem);
+    white-space: nowrap;
+}
+
+
+.admin-demo-locked input:disabled,
+.admin-demo-locked select:disabled,
+.admin-demo-locked textarea:disabled,
+.admin-demo-locked button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
 }

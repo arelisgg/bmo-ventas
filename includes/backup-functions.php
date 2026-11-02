@@ -206,6 +206,10 @@ function backup_path(PDO $pdo, string $name): ?string
  */
 function run_daily_backup(PDO $pdo): void
 {
+    if (defined('APP_DEMO_MODE') && APP_DEMO_MODE) {
+        return;
+    }
+
     try {
         $latest = list_backups($pdo)[0]['time'] ?? 0;
 

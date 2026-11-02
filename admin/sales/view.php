@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/sales-functions.php';
+require_once __DIR__ . '/../../includes/payment-functions.php';
 require_once __DIR__ . '/_layout.php';
 
 require_admin();
@@ -140,6 +141,20 @@ $channelLabels =
 
 $paymentLabels =
     sale_payment_methods();
+
+
+/*
+|--------------------------------------------------------------------------
+| Payments
+|--------------------------------------------------------------------------
+*/
+
+$paymentsReady = payment_tables_exist($pdo) && $sale['doc_type'] === 'invoice';
+$payments = $paymentsReady ? sale_payments($pdo, (int) $sale['id']) : [];
+$paidAmount = round(array_sum(array_map(static fn (array $payment): float => (float) $payment['amount'], $payments)), 2);
+$balance = round((float) $sale['total'] - $paidAmount, 2);
+$paymentMethodsUsed = array_unique(array_column($payments, 'method'));
+$canAddPayment = $paymentsReady && $sale['status'] !== 'cancelled' && $balance > 0;
 
 
 /*
@@ -403,6 +418,24 @@ render_sales_layout_start(
 <?php if (isset($_GET['converted'])): ?>
     <div class="admin-notice admin-notice-success">
         Convertida en factura de venta. El stock ya fue descontado.
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_GET['payment'])): ?>
+    <div class="admin-notice admin-notice-success">
+        Pago registrado.
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_GET['payment_deleted'])): ?>
+    <div class="admin-notice admin-notice-success">
+        Pago eliminado.
+    </div>
+<?php endif; ?>
+
+<?php if (isset($_GET['payment_error'])): ?>
+    <div class="admin-notice admin-notice-error">
+        <?= e((string) $_GET['payment_error']) ?>
     </div>
 <?php endif; ?>
 
@@ -902,12 +935,15 @@ render_sales_layout_start(
                     <dd>
 
                         <?= e(
-                            sale_option_label(
-                                $paymentLabels,
-                                $sale[
-                                    'payment_method'
-                                ]
-                            )
+                            count($paymentMethodsUsed) > 1
+                                ? implode(' + ', array_map(
+                                    static fn (string $method): string => sale_option_label($paymentLabels, $method),
+                                    $paymentMethodsUsed
+                                ))
+                                : sale_option_label(
+                                    $paymentLabels,
+                                    $paymentMethodsUsed[0] ?? $sale['payment_method']
+                                )
                         ) ?>
 
                     </dd>
@@ -979,6 +1015,81 @@ render_sales_layout_start(
             </dl>
 
         </div>
+
+
+
+        <!-- =================================================
+             PAYMENTS
+             ================================================= -->
+
+        <?php if ($paymentsReady): ?>
+            <div class="sale-view-meta-section sale-payments">
+                <span class="sale-view-meta-title">
+                    PAGOS
+                </span>
+
+                <?php if ($payments === []): ?>
+                    <p class="sale-view-notes">Todavía no hay pagos.</p>
+                <?php else: ?>
+                    <ul class="sale-payment-list">
+                        <?php foreach ($payments as $payment): ?>
+                            <li>
+                                <div>
+                                    <strong><?= e(format_money($payment['amount'])) ?></strong>
+                                    <?= e(sale_option_label($paymentLabels, $payment['method'])) ?>
+                                    <span class="sale-payment-meta">
+                                        <?= e(date('d/m/Y H:i', strtotime((string) $payment['paid_at']))) ?>
+                                        <?= $payment['note'] ? '· ' . e($payment['note']) : '' ?>
+                                    </span>
+                                </div>
+                                <?php if (admin_is_owner() && $sale['status'] !== 'cancelled'): ?>
+                                    <form method="post" action="<?= e(APP_BASE_URL) ?>/admin/sales/update-status.php"
+                                        onsubmit="return confirm('¿Eliminar este pago?');">
+                                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                                        <input type="hidden" name="id" value="<?= (int) $sale['id'] ?>">
+                                        <input type="hidden" name="action" value="delete_payment">
+                                        <input type="hidden" name="payment_id" value="<?= (int) $payment['id'] ?>">
+                                        <button class="sale-payment-delete" type="submit" title="Eliminar pago">×</button>
+                                    </form>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+
+                <dl class="sale-meta">
+                    <div>
+                        <dt>Pagado</dt>
+                        <dd><?= e(format_money($paidAmount)) ?></dd>
+                    </div>
+                    <div>
+                        <dt><?= $balance < 0 ? 'A favor del cliente' : 'Saldo pendiente' ?></dt>
+                        <dd><strong><?= e(format_money(abs($balance))) ?></strong></dd>
+                    </div>
+                </dl>
+
+                <?php if ($canAddPayment): ?>
+                    <form class="sale-payment-form" method="post" action="<?= e(APP_BASE_URL) ?>/admin/sales/update-status.php">
+                        <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                        <input type="hidden" name="id" value="<?= (int) $sale['id'] ?>">
+                        <input type="hidden" name="action" value="add_payment">
+                        <div class="sale-payment-fields">
+                            <input class="form-input" type="text" inputmode="decimal" name="amount"
+                                value="<?= e(number_format($balance, 2, '.', '')) ?>" aria-label="Monto" required>
+                            <select class="form-select" name="method" aria-label="Método">
+                                <?php foreach ($paymentLabels as $value => $label): ?>
+                                    <option value="<?= e($value) ?>" <?= $sale['payment_method'] === $value ? 'selected' : '' ?>>
+                                        <?= e($label) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <input class="form-input" type="text" name="note" maxlength="190" placeholder="Nota (opcional), ej. abono, referencia">
+                        <button class="admin-button" type="submit">REGISTRAR PAGO O ABONO</button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
 
 
 

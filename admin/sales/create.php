@@ -8,6 +8,7 @@ require_once __DIR__ . '/../../includes/product-functions.php';
 require_once __DIR__ . '/../../includes/sales-functions.php';
 require_once __DIR__ . '/../../includes/wholesale-functions.php';
 require_once __DIR__ . '/../../includes/finance-functions.php';
+require_once __DIR__ . '/../../includes/payment-functions.php';
 require_once __DIR__ . '/_layout.php';
 
 require_admin();
@@ -555,6 +556,16 @@ if (
 
             fill_sale_item_costs($pdo, $saleId);
 
+            // "Pagada" pays what is still owed with the chosen method;
+            // abonos and mixed payments are added from the sale view.
+            if (payment_tables_exist($pdo)) {
+                if ($form['doc_type'] === 'invoice' && $form['status'] === 'paid') {
+                    settle_sale_balance($pdo, $saleId, $form['payment_method']);
+                }
+
+                sync_sale_payment_status($pdo, $saleId);
+            }
+
             $pdo->commit();
 
             header(
@@ -596,7 +607,8 @@ if (
 */
 $variantOptions = [];
 
-// Earlier 'por encargo' products, to pick them again.
+// Catalog models and earlier 'por encargo' products, to sell them por
+// encargo even without stock, in a picker with photos.
 $madeToOrderProducts = $tablesReady ? made_to_order_products($pdo) : [];
 
 $productCategories = $pdo->query(
@@ -788,19 +800,107 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
 
                             <div class="sale-custom-fields" data-custom-fields <?= $item['source'] === 'workshop' ? '' : 'hidden' ?>>
                                 <?php if (count($madeToOrderProducts) > 0): ?>
-                                    <select class="form-select sale-custom-previous" data-custom-input data-custom-previous>
-                                        <option value="">Producto nuevo (o elige uno ya encargado)</option>
-                                        <?php foreach ($madeToOrderProducts as $previousProduct): ?>
-                                            <option value="<?= e($previousProduct['code']) ?>"
-                                                data-name="<?= e($previousProduct['name']) ?>"
-                                                data-category="<?= (int) $previousProduct['category_id'] ?>"
-                                                data-description="<?= e($previousProduct['description'] ?? '') ?>"
-                                                data-cost="<?= e(admin_can_see_costs() ? ($previousProduct['cost_price'] ?? '') : '') ?>"
-                                                data-price="<?= e($previousProduct['price'] ?? '') ?>">
-                                                <?= e($previousProduct['name']) ?> · <?= e($previousProduct['code']) ?>
-                                            </option>
-                                        <?php endforeach; ?>
-                                    </select>
+                                    <div class="sale-product-picker sale-custom-previous" data-custom-picker>
+                                        <select class="sale-native-select" data-custom-input data-custom-previous tabindex="-1" aria-hidden="true">
+                                            <option value="">Producto nuevo</option>
+                                            <?php foreach ($madeToOrderProducts as $previousProduct): ?>
+                                                <?php
+                                                $previousImage = !empty($previousProduct['main_image'])
+                                                    ? APP_BASE_URL . '/' . ltrim((string) $previousProduct['main_image'], '/')
+                                                    : '';
+                                                $previousStock = (int) $previousProduct['stock_total'];
+                                                ?>
+                                                <option value="<?= e($previousProduct['code']) ?>"
+                                                    data-name="<?= e($previousProduct['name']) ?>"
+                                                    data-category="<?= (int) $previousProduct['category_id'] ?>"
+                                                    data-category-name="<?= e($previousProduct['category_name'] ?? '') ?>"
+                                                    data-description="<?= e($previousProduct['description'] ?? '') ?>"
+                                                    data-cost="<?= e(admin_can_see_costs() ? ($previousProduct['cost_price'] ?? '') : '') ?>"
+                                                    data-price="<?= e($previousProduct['price'] ?? '') ?>"
+                                                    data-wholesale-price="<?= e(!empty($previousProduct['is_wholesale']) ? ($previousProduct['wholesale_price'] ?? '') : '') ?>"
+                                                    data-image="<?= e($previousImage) ?>"
+                                                    data-stock="<?= $previousStock ?>">
+                                                    <?= e($previousProduct['name']) ?>
+                                                </option>
+                                            <?php endforeach; ?>
+                                        </select>
+
+                                        <button class="sale-product-trigger" type="button" data-custom-trigger>
+                                            <span class="sale-product-trigger-image" data-custom-picker-image>
+                                                <span class="sale-product-no-image">+</span>
+                                            </span>
+                                            <span class="sale-product-trigger-info">
+                                                <strong data-custom-picker-title>Producto nuevo</strong>
+                                                <small data-custom-picker-meta>O elige un modelo del catálogo, aunque no tenga stock</small>
+                                            </span>
+                                            <span class="sale-product-trigger-arrow">↓</span>
+                                        </button>
+
+                                        <div class="sale-product-menu" data-custom-menu hidden>
+                                            <div class="sale-product-search">
+                                                <input type="search" placeholder="Buscar modelo, código o categoría..."
+                                                    autocomplete="off" data-custom-search>
+                                            </div>
+
+                                            <div class="sale-product-options">
+                                                <button class="sale-product-option" type="button" data-custom-option data-value="" data-search="">
+                                                    <span class="sale-product-option-image"><span>+</span></span>
+                                                    <span class="sale-product-option-info">
+                                                        <strong>Producto nuevo</strong>
+                                                        <span>Escribe los datos a mano</span>
+                                                    </span>
+                                                </button>
+
+                                                <?php foreach ($madeToOrderProducts as $previousProduct): ?>
+                                                    <?php
+                                                    $previousImage = !empty($previousProduct['main_image'])
+                                                        ? APP_BASE_URL . '/' . ltrim((string) $previousProduct['main_image'], '/')
+                                                        : '';
+                                                    $previousStock = (int) $previousProduct['stock_total'];
+                                                    $previousSearch = mb_strtolower(implode(' ', [
+                                                        $previousProduct['code'],
+                                                        $previousProduct['name'],
+                                                        $previousProduct['category_name'] ?? '',
+                                                    ]));
+                                                    ?>
+                                                    <button class="sale-product-option" type="button" data-custom-option
+                                                        data-value="<?= e($previousProduct['code']) ?>" data-search="<?= e($previousSearch) ?>">
+                                                        <span class="sale-product-option-image">
+                                                            <?php if ($previousImage !== ''): ?>
+                                                                <img src="<?= e($previousImage) ?>" alt="<?= e($previousProduct['name']) ?>" loading="lazy">
+                                                            <?php else: ?>
+                                                                <span>Sin imagen</span>
+                                                            <?php endif; ?>
+                                                        </span>
+
+                                                        <span class="sale-product-option-info">
+                                                            <strong><?= e($previousProduct['name']) ?></strong>
+                                                            <span>
+                                                                <?= e($previousProduct['code']) ?>
+                                                                <?php if (!empty($previousProduct['category_name'])): ?>
+                                                                    · <?= e($previousProduct['category_name']) ?>
+                                                                <?php endif; ?>
+                                                                <?php if ((int) $previousProduct['is_active'] !== 1): ?>
+                                                                    · Oculto
+                                                                <?php endif; ?>
+                                                            </span>
+                                                        </span>
+
+                                                        <span class="sale-product-option-side">
+                                                            <?php if ($previousStock > 0): ?>
+                                                                <span class="sale-stock-badge">Stock <?= $previousStock ?></span>
+                                                            <?php else: ?>
+                                                                <span class="sale-stock-badge is-empty">Sin stock</span>
+                                                            <?php endif; ?>
+                                                            <?php if ($previousProduct['price'] !== null): ?>
+                                                                <small><?= e(format_money($previousProduct['price'])) ?></small>
+                                                            <?php endif; ?>
+                                                        </span>
+                                                    </button>
+                                                <?php endforeach; ?>
+                                            </div>
+                                        </div>
+                                    </div>
                                 <?php endif; ?>
                                 <input class="form-input sale-custom-name" type="text" name="items[custom_name][]" maxlength="180"
                                     value="<?= e($item['custom_name']) ?>" placeholder="Nombre del producto (obligatorio)" data-custom-input>
@@ -2266,13 +2366,25 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                 const option = select.selectedOptions[0];
 
                 if (!option || option.value === "") {
+                    // "Producto nuevo": clear what a catalog model filled in.
+                    ["items[custom_name][]", "items[custom_code][]", "items[custom_description][]", "items[custom_cost][]"]
+                        .forEach(name => {
+                            const input = row.querySelector(`[name="${name}"]`);
+
+                            if (input) {
+                                input.value = "";
+                            }
+                        });
+
                     return;
                 }
+
+                const useWholesale = channelSelect.value === "wholesale" && option.dataset.wholesalePrice;
 
                 const fields = {
                     "items[custom_name][]": option.dataset.name,
                     "items[custom_code][]": option.value,
-                    "items[unit_price][]": option.dataset.price,
+                    "items[unit_price][]": useWholesale ? option.dataset.wholesalePrice : option.dataset.price,
                     "items[custom_category][]": option.dataset.category,
                     "items[custom_description][]": option.dataset.description,
                     "items[custom_cost][]": option.dataset.cost,
@@ -2288,12 +2400,126 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                 });
             }
 
+            // Catalog picker for 'por encargo' rows, same look as the inventory picker.
+            function renderCustomPicker(row) {
+                const picker = row.querySelector("[data-custom-picker]");
+
+                if (!picker) {
+                    return;
+                }
+
+                const option = picker.querySelector("[data-custom-previous]").selectedOptions[0];
+                const imageBox = picker.querySelector("[data-custom-picker-image]");
+                const title = picker.querySelector("[data-custom-picker-title]");
+                const meta = picker.querySelector("[data-custom-picker-meta]");
+
+                imageBox.innerHTML = '<span class="sale-product-no-image">+</span>';
+
+                if (!option || option.value === "") {
+                    title.textContent = "Producto nuevo";
+                    meta.textContent = "O elige un modelo del catálogo, aunque no tenga stock";
+                    return;
+                }
+
+                const stock = Number(option.dataset.stock || 0);
+
+                title.textContent = option.dataset.name || "Producto";
+                meta.textContent = [
+                    option.value,
+                    option.dataset.categoryName,
+                    stock > 0 ? `Stock ${stock}` : "Sin stock",
+                ].filter(Boolean).join(" · ");
+
+                if (option.dataset.image) {
+                    const image = document.createElement("img");
+                    image.src = option.dataset.image;
+                    image.alt = option.dataset.name || "";
+                    imageBox.innerHTML = "";
+                    imageBox.appendChild(image);
+                }
+            }
+
+            function closeCustomPickers(except = null) {
+                container.querySelectorAll("[data-custom-picker]").forEach(picker => {
+                    if (picker === except) {
+                        return;
+                    }
+
+                    picker.classList.remove("is-open");
+                    picker.querySelector("[data-custom-menu]").hidden = true;
+                });
+            }
+
+            container.addEventListener("click", event => {
+                const trigger = event.target.closest("[data-custom-trigger]");
+
+                if (trigger) {
+                    const picker = trigger.closest("[data-custom-picker]");
+                    const menu = picker.querySelector("[data-custom-menu]");
+                    const opening = menu.hidden;
+
+                    closeCustomPickers(picker);
+                    menu.hidden = !opening;
+                    picker.classList.toggle("is-open", opening);
+
+                    if (opening) {
+                        requestAnimationFrame(() => picker.querySelector("[data-custom-search]")?.focus());
+                    }
+
+                    return;
+                }
+
+                const choice = event.target.closest("[data-custom-option]");
+
+                if (choice) {
+                    const picker = choice.closest("[data-custom-picker]");
+                    const select = picker.querySelector("[data-custom-previous]");
+
+                    select.value = choice.dataset.value;
+                    select.dispatchEvent(new Event("change", { bubbles: true }));
+                    renderCustomPicker(choice.closest("[data-sale-item]"));
+                    closeCustomPickers();
+                }
+            });
+
+            container.addEventListener("input", event => {
+                if (!event.target.matches("[data-custom-search]")) {
+                    return;
+                }
+
+                const query = event.target.value.trim().toLowerCase();
+
+                event.target.closest("[data-custom-picker]").querySelectorAll("[data-custom-option]").forEach(option => {
+                    option.hidden = query !== "" && !(option.dataset.search || "").includes(query);
+                });
+            });
+
+            document.addEventListener("click", event => {
+                if (!event.target.closest("[data-custom-picker]")) {
+                    closeCustomPickers();
+                }
+            });
+
+            document.addEventListener("keydown", event => {
+                if (event.key === "Escape") {
+                    closeCustomPickers();
+                }
+            });
+
             function resetSource(row) {
                 row.querySelector("[data-source-select]").value = "inventory";
                 row.querySelectorAll("[data-custom-input]").forEach(input => {
                     input.value = "";
                 });
                 row.querySelector("[data-custom-visibility]").value = "hidden";
+                row.querySelectorAll("[data-custom-search]").forEach(search => {
+                    search.value = "";
+                });
+                row.querySelectorAll("[data-custom-option]").forEach(option => {
+                    option.hidden = false;
+                });
+                closeCustomPickers();
+                renderCustomPicker(row);
                 renderPhoto(row);
                 applySource(row);
             }
@@ -2333,8 +2559,9 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
             container.querySelectorAll("[data-sale-item]").forEach(row => {
                 applySource(row);
                 renderPhoto(row);
+                renderCustomPicker(row);
             });
         });
     </script>
 <?php endif; ?>
-<?php render_sales_layout_end(); ?>
+<?php render_sales_layout_end(); ?>

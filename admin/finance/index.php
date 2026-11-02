@@ -103,31 +103,31 @@ render_sales_layout_start('Finanzas', 'finance');
     <div class="dashboard-stat-grid finance-stat-grid">
         <article class="dashboard-stat-card">
             <span class="dashboard-stat-label">Ventas</span>
-            <strong class="dashboard-stat-value"><?= e(finance_money($summary['revenue'])) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(finance_money($summary['revenue'])) ?></strong>
             <span class="dashboard-stat-note">
                 <?= $summary['sales_count'] ?> venta(s) · <?= $summary['units'] ?> unidades
             </span>
         </article>
         <article class="dashboard-stat-card">
             <span class="dashboard-stat-label">Costo de lo vendido</span>
-            <strong class="dashboard-stat-value"><?= e(finance_money($summary['cost'])) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(finance_money($summary['cost'])) ?></strong>
             <span class="dashboard-stat-note">Costo de los productos</span>
         </article>
         <article class="dashboard-stat-card">
             <span class="dashboard-stat-label">Ganancia bruta</span>
-            <strong class="dashboard-stat-value"><?= e(finance_money($summary['gross_profit'])) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(finance_money($summary['gross_profit'])) ?></strong>
             <span class="dashboard-stat-note">Margen <?= e(format_percent($summary['gross_margin'])) ?></span>
         </article>
         <article class="dashboard-stat-card">
             <span class="dashboard-stat-label">Gastos</span>
-            <strong class="dashboard-stat-value"><?= e(finance_money($summary['expenses'])) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(finance_money($summary['expenses'])) ?></strong>
             <span class="dashboard-stat-note">
                 <a href="<?= e(APP_BASE_URL) ?>/admin/finance/expenses.php?<?= e($filterQuery) ?>">Ver gastos →</a>
             </span>
         </article>
         <article class="dashboard-stat-card finance-net-card <?= $summary['net_profit'] < 0 ? 'finance-negative' : '' ?>">
             <span class="dashboard-stat-label">Utilidad neta</span>
-            <strong class="dashboard-stat-value"><?= e(finance_money($summary['net_profit'])) ?></strong>
+            <strong class="dashboard-stat-value dashboard-stat-money"><?= e(finance_money($summary['net_profit'])) ?></strong>
             <span class="dashboard-stat-note">Margen <?= e(format_percent($summary['net_margin'])) ?></span>
         </article>
     </div>
