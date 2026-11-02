@@ -647,7 +647,11 @@ function load_sale_for_edit(PDO $pdo, int $saleId): ?array
             'channel' => (string) $sale['channel'],
             'payment_method' => (string) $sale['payment_method'],
             'status' => (string) $sale['status'],
-            'discount' => (float) $sale['discount'] > 0 ? $money($sale['discount']) : '',
+            // The form's discount is the manual one; the promotion is added on save.
+            'discount' => ($manual = (float) $sale['discount'] - (float) ($sale['promotion_discount'] ?? 0)) > 0
+                ? $money($manual)
+                : '',
+            'promotion_id' => (string) ($sale['promotion_id'] ?? ''),
             'notes' => (string) ($sale['notes'] ?? ''),
             'sold_at' => date('Y-m-d\TH:i', strtotime((string) $sale['sold_at'])),
         ],

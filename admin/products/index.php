@@ -3,6 +3,38 @@ declare(strict_types=1);
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_admin();
+
+/*
+|--------------------------------------------------------------------------
+| Save Catalog Order
+|--------------------------------------------------------------------------
+|
+| products.sort_order: 1, 2, 3… go first in the catalog in that order;
+| empty (0) = no order, shown in random order after them.
+|
+*/
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST' &&
+    ($_POST['action'] ?? '') === 'save_order'
+) {
+    if (verify_csrf_token($_POST['csrf_token'] ?? null) && is_array($_POST['sort_order'] ?? null)) {
+        $updateOrder = $pdo->prepare('UPDATE products SET sort_order = :sort_order WHERE id = :id');
+
+        foreach ($_POST['sort_order'] as $productId => $value) {
+            $order = filter_var(trim((string) $value), FILTER_VALIDATE_INT, ['options' => ['min_range' => 0, 'max_range' => 100000]]);
+
+            if (ctype_digit((string) $productId)) {
+                $updateOrder->execute([
+                    'sort_order' => $order === false ? 0 : $order,
+                    'id' => (int) $productId,
+                ]);
+            }
+        }
+    }
+
+    header('Location: ' . APP_BASE_URL . '/admin/products/?order_saved=1');
+    exit;
+}
 /*
 |--------------------------------------------------------------------------
 | Load Productos
@@ -19,6 +51,7 @@ $statement =
             p.is_active,
             p.is_featured,
             p.is_new,
+            p.sort_order,
             p.created_at,            c.name AS category_name,            COUNT(pv.id) AS variant_count,            COALESCE(
                 SUM(pv.stock),
                 0
@@ -33,8 +66,11 @@ $statement =
             p.is_active,
             p.is_featured,
             p.is_new,
+            p.sort_order,
             p.created_at,
             c.name         ORDER BY
+            p.sort_order = 0 ASC,
+            p.sort_order ASC,
             p.created_at DESC,
             p.id DESC'
     );
@@ -130,6 +166,11 @@ $products =
                 ">
                     Productoo actualizado correctamente.
                 </div> <?php endif; ?>
+            <?php if (isset($_GET['order_saved'])): ?>
+                <div class="admin-notice admin-notice-success">
+                    Orden del catálogo guardado.
+                </div>
+            <?php endif; ?>
             <?php if (
                 isset(
                 $_GET['status']
@@ -183,10 +224,22 @@ $products =
                     </a>
                 </section>
             <?php else: ?>
+                <form class="product-order-bar" method="post" id="productOrderForm">
+                    <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+                    <input type="hidden" name="action" value="save_order">
+                    <p>
+                        <strong>Orden en el catálogo:</strong> escribe 1, 2, 3… en la columna Orden para que esos
+                        productos salgan primero. Los que quedan vacíos se muestran después en orden aleatorio.
+                    </p>
+                    <button class="admin-button" type="submit">GUARDAR ORDEN</button>
+                </form>
                 <div class="admin-table-wrapper">
                     <table class="admin-table">
                         <thead>
                             <tr>
+                                <th>
+                                    Orden
+                                </th>
                                 <th>
                                     Imagen
                                 </th>
@@ -219,6 +272,12 @@ $products =
                             $product
                         ): ?>
                                 <tr>
+                                    <td>
+                                        <input class="form-input product-order-input" type="number" min="0" step="1"
+                                            form="productOrderForm" name="sort_order[<?= (int) $product['id'] ?>]"
+                                            value="<?= (int) $product['sort_order'] > 0 ? (int) $product['sort_order'] : '' ?>"
+                                            placeholder="—" aria-label="Orden de <?= e($product['name']) ?>">
+                                    </td>
                                     <td> <?php if (
                                         !empty(
                                         $product[

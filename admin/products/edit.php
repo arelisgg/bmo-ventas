@@ -657,6 +657,7 @@ if ($isPost) {
             ]);
             save_product_wholesale($pdo, $productId, $wholesaleValues);
             save_product_cost($pdo, $productId, $costValues);
+            save_product_sort_order($pdo, $productId, product_sort_order_from_post());
             /*
             |--------------------------------------------------------------------------
             | Replace Variants
@@ -1221,6 +1222,8 @@ if ($isPost) {
                         </div>
 
                     </section>
+
+                    <?php render_product_sort_field($isPost ? product_sort_order_from_post() : (int) ($product['sort_order'] ?? 0)); ?>
 
 
                     <!-- =================================================

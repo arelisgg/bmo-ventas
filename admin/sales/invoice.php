@@ -458,7 +458,12 @@ $base = APP_BASE_URL;
             </tr>
             <?php if ($totals['discount'] > 0): ?>
                 <tr>
-                    <td>Descuento</td>
+                    <td>
+                        Descuento
+                        <?php if (!empty($sale['promotion_name'])): ?>
+                            <br><small>Promoción: <?= e($sale['promotion_name']) ?></small>
+                        <?php endif; ?>
+                    </td>
                     <td class="num">-<?= e(format_money($totals['discount'])) ?></td>
                 </tr>
             <?php endif; ?>

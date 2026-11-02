@@ -9,6 +9,7 @@ require_once __DIR__ . '/../../includes/sales-functions.php';
 require_once __DIR__ . '/../../includes/wholesale-functions.php';
 require_once __DIR__ . '/../../includes/finance-functions.php';
 require_once __DIR__ . '/../../includes/payment-functions.php';
+require_once __DIR__ . '/../../includes/promotion-functions.php';
 require_once __DIR__ . '/_layout.php';
 
 require_admin();
@@ -67,6 +68,7 @@ $form = [
     'payment_method' => 'cash',
     'status' => 'paid',
     'discount' => '',
+    'promotion_id' => '',
     'notes' => '',
     'sold_at' => date('Y-m-d\TH:i'),
 ];
@@ -304,7 +306,8 @@ if (
                     pv.size,
                     pv.stock,
                     p.code,
-                    p.name
+                    p.name,
+                    p.category_id
                  FROM product_variants pv
                  INNER JOIN products p
                     ON p.id = pv.product_id
@@ -315,6 +318,7 @@ if (
             $lineItems = [];
             $requestedByVariant = [];
             $subtotal = 0.0;
+            $promotionLines = [];
 
             foreach ($requestedItems as $item) {
                 if ($item['source'] === 'workshop') {
@@ -324,6 +328,12 @@ if (
                     );
 
                     $subtotal += $lineTotal;
+
+                    $promotionLines[] = [
+                        'category_id' => $item['custom_category_id'],
+                        'quantity' => $item['quantity'],
+                        'unit_price' => $item['unit_price'],
+                    ];
 
                     $madeToOrderProduct = save_made_to_order_product($pdo, $item);
                     save_made_to_order_cost($pdo, $madeToOrderProduct['id'], $item['custom_cost']);
@@ -380,6 +390,12 @@ if (
 
                 $subtotal += $lineTotal;
 
+                $promotionLines[] = [
+                    'category_id' => $variant['category_id'] !== null ? (int) $variant['category_id'] : null,
+                    'quantity' => $item['quantity'],
+                    'unit_price' => $item['unit_price'],
+                ];
+
                 $lineItems[] = [
                     'source' => 'inventory',
                     'product_id' => (int) $variant['product_id'],
@@ -397,9 +413,35 @@ if (
 
             $subtotal = round($subtotal, 2);
 
+            // The promotion the user accepted in the form, checked again here.
+            $promotion = null;
+            $promotionsReady = promotion_tables_exist($pdo);
+
+            if ($promotionsReady && ctype_digit($form['promotion_id'])) {
+                $keptPromotionId = $editData !== null && ($editData['sale']['promotion_id'] ?? null) !== null
+                    ? (int) $editData['sale']['promotion_id']
+                    : null;
+
+                $promotion = resolve_sale_promotion(
+                    $pdo,
+                    (int) $form['promotion_id'],
+                    $promotionLines,
+                    $soldAt->format('Y-m-d'),
+                    $form['customer_phone'],
+                    $form['customer_name'],
+                    $editData !== null ? $editId : null,
+                    $keptPromotionId
+                );
+            }
+
+            $manualDiscount = $discount;
+            $discount = round($manualDiscount + ($promotion['discount'] ?? 0), 2);
+
             if ($discount > $subtotal) {
                 throw new DomainException(
-                    'El descuento no puede ser mayor que el subtotal.'
+                    $promotion !== null
+                        ? 'El descuento más la promoción no puede ser mayor que el subtotal.'
+                        : 'El descuento no puede ser mayor que el subtotal.'
                 );
             }
 
@@ -499,6 +541,23 @@ if (
                         'sale_number' => sale_number_for($form['doc_type'], $saleId),
                         'id' => $saleId,
                     ]);
+
+            // sales.discount holds the whole discount; these say how much was the promotion.
+            if ($promotionsReady) {
+                $pdo->prepare(
+                    'UPDATE sales
+                     SET
+                        promotion_id = :promotion_id,
+                        promotion_name = :promotion_name,
+                        promotion_discount = :promotion_discount
+                     WHERE id = :id'
+                )->execute([
+                    'promotion_id' => $promotion['id'] ?? null,
+                    'promotion_name' => $promotion['name'] ?? null,
+                    'promotion_discount' => $promotion['discount'] ?? 0,
+                    'id' => $saleId,
+                ]);
+            }
 
             $insertItem = $pdo->prepare(
                 'INSERT INTO sale_items
@@ -630,6 +689,7 @@ if ($tablesReady) {
         p.code,
         p.name,
         p.price,
+        p.category_id,
         ' . wholesale_select_columns($pdo) . '
         p.main_image,
         p.is_active
@@ -675,6 +735,9 @@ if ($tablesReady) {
             'image' =>
                 $row['main_image'],
 
+            'category_id' =>
+                (int) ($row['category_id'] ?? 0),
+
             'stock' =>
                 (int) $row['stock'] + ($editData['returned_stock'][(int) $row['id']] ?? 0),
 
@@ -718,6 +781,24 @@ foreach ($formItems as $index => $item) {
         'custom_cost' => '',
         'existing_image' => '',
     ];
+}
+
+/*
+| Promotions offered in the form (active ones, plus the one an edited
+| sale already has). Nothing is applied until the user accepts it.
+*/
+$salePromotions = [];
+
+if ($tablesReady && promotion_tables_exist($pdo)) {
+    $keptPromotionId = (int) ($editData['sale']['promotion_id'] ?? 0);
+
+    foreach (load_promotions($pdo) as $promotionRow) {
+        if ((int) $promotionRow['is_active'] === 1 || (int) $promotionRow['id'] === $keptPromotionId) {
+            $salePromotions[] = promotion_for_js($promotionRow) + [
+                'kept' => (int) $promotionRow['id'] === $keptPromotionId,
+            ];
+        }
+    }
 }
 
 render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['sale_number'] ?? '') : 'Nueva venta');
@@ -818,6 +899,7 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                                                     data-cost="<?= e(admin_can_see_costs() ? ($previousProduct['cost_price'] ?? '') : '') ?>"
                                                     data-price="<?= e($previousProduct['price'] ?? '') ?>"
                                                     data-wholesale-price="<?= e(!empty($previousProduct['is_wholesale']) ? ($previousProduct['wholesale_price'] ?? '') : '') ?>"
+                                                    data-wholesale-min="<?= (int) (!empty($previousProduct['is_wholesale']) ? ($previousProduct['wholesale_min_qty'] ?? 0) : 0) ?>"
                                                     data-image="<?= e($previousImage) ?>"
                                                     data-stock="<?= $previousStock ?>">
                                                     <?= e($previousProduct['name']) ?>
@@ -1002,7 +1084,7 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                                                 )
                                             )
                                             : ''
-                                            ?>" data-wholesale-price="<?= e($option['wholesale_price']) ?>" data-wholesale-min="<?= (int) $option['wholesale_min_qty'] ?>" data-image="<?= e(
+                                            ?>" data-wholesale-price="<?= e($option['wholesale_price']) ?>" data-wholesale-min="<?= (int) $option['wholesale_min_qty'] ?>" data-category="<?= (int) $option['category_id'] ?>" data-image="<?= e(
                                             $imageUrl
                                         ) ?>" data-code="<?= e(
                                              $option['code']
@@ -1370,16 +1452,61 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
             </div>
         </section>
 
+        <section class="form-section sale-offers" id="saleOffers" hidden>
+            <div class="form-section-header">
+                <h2>Promociones y precio mayorista</h2>
+            </div>
+
+            <input type="hidden" name="promotion_id" id="promotionId" value="<?= e($form['promotion_id']) ?>">
+
+            <div class="sale-offers-applied" data-offers-applied></div>
+            <div class="sale-offers-list" data-offers-list></div>
+            <ul class="sale-offers-notes" data-offers-notes></ul>
+
+            <p class="form-hint">
+                Nada se aplica solo: elige una opción y confirma el nuevo precio.
+                Una venta lleva una sola promoción y no se junta con el precio mayorista.
+            </p>
+        </section>
+
         <div class="inventory-save-bar">
             <div>
                 <span class="inventory-save-label">Total de la venta</span>
                 <strong id="saleGrandTotal"><?= e(currency_symbol()) ?>0.00</strong>
+                <small class="sale-save-promotion" id="salePromotionLine" hidden></small>
             </div>
             <button class="admin-button" type="submit">
                 <?= $editData !== null ? 'GUARDAR CAMBIOS' : 'GUARDAR' ?>
             </button>
         </div>
     </form>
+
+        <dialog class="sale-offer-dialog" id="saleOfferDialog">
+            <form method="dialog">
+                <span class="page-eyebrow" data-dialog-eyebrow>¿APLICAR PROMOCIÓN?</span>
+                <h2 data-dialog-title></h2>
+                <p data-dialog-detail></p>
+                <dl class="sale-offer-dialog-prices">
+                    <div>
+                        <dt>Total actual</dt>
+                        <dd data-dialog-before></dd>
+                    </div>
+                    <div>
+                        <dt>Nuevo total</dt>
+                        <dd data-dialog-after></dd>
+                    </div>
+                    <div>
+                        <dt>El cliente ahorra</dt>
+                        <dd data-dialog-saving></dd>
+                    </div>
+                </dl>
+                <p class="form-hint" data-dialog-warning hidden></p>
+                <div class="sale-offer-dialog-actions">
+                    <button class="admin-button admin-button-outline" type="submit" value="reject">NO APLICAR</button>
+                    <button class="admin-button" type="submit" value="accept">SÍ, APLICAR</button>
+                </div>
+            </form>
+        </dialog>
 
     <script>
 
@@ -2332,35 +2459,16 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                 text.textContent = file.name + " · cambiar foto";
             }
 
-            // Mayorista channel: use the product's wholesale price when it has one.
+            // Wholesale prices are offered (and confirmed) in the "Promociones y
+            // precio mayorista" block below, never applied without asking.
             const channelSelect = document.getElementById("channel");
 
+            // A new product starts at its retail price; any wholesale price applied
+            // to the row before is forgotten.
             function applyChannelPrice(row) {
-                const option = row.querySelector("[data-variant-select]").selectedOptions[0];
-                const priceInput = row.querySelector("[data-price-input]");
-
-                if (!option || option.value === "" || !option.dataset.wholesalePrice) {
-                    return;
-                }
-
-                const isWholesale = channelSelect.value === "wholesale";
-
-                priceInput.value = isWholesale
-                    ? option.dataset.wholesalePrice
-                    : option.dataset.price;
-
-                const minimum = Number(option.dataset.wholesaleMin || 0);
-
-                priceInput.title = isWholesale && minimum > 1
-                    ? `Precio mayorista desde ${minimum} pares`
-                    : "";
-
-                priceInput.dispatchEvent(new Event("input", { bubbles: true }));
+                delete row.dataset.wholesaleApplied;
+                delete row.dataset.retailPrice;
             }
-
-            channelSelect.addEventListener("change", () => {
-                container.querySelectorAll("[data-sale-item]").forEach(applyChannelPrice);
-            });
 
             function fillPrevious(row, select) {
                 const option = select.selectedOptions[0];
@@ -2379,12 +2487,13 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                     return;
                 }
 
-                const useWholesale = channelSelect.value === "wholesale" && option.dataset.wholesalePrice;
+                delete row.dataset.wholesaleApplied;
+                delete row.dataset.retailPrice;
 
                 const fields = {
                     "items[custom_name][]": option.dataset.name,
                     "items[custom_code][]": option.value,
-                    "items[unit_price][]": useWholesale ? option.dataset.wholesalePrice : option.dataset.price,
+                    "items[unit_price][]": option.dataset.price,
                     "items[custom_category][]": option.dataset.category,
                     "items[custom_description][]": option.dataset.description,
                     "items[custom_cost][]": option.dataset.cost,
@@ -2507,6 +2616,8 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
             });
 
             function resetSource(row) {
+                delete row.dataset.wholesaleApplied;
+                delete row.dataset.retailPrice;
                 row.querySelector("[data-source-select]").value = "inventory";
                 row.querySelectorAll("[data-custom-input]").forEach(input => {
                     input.value = "";
@@ -2561,6 +2672,905 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                 renderPhoto(row);
                 renderCustomPicker(row);
             });
+        });
+    </script>
+    <script>
+        /*
+        |--------------------------------------------------------------------------
+        | Stock across rows
+        |--------------------------------------------------------------------------
+        |
+        | The same size can be in several rows, so each row only offers what
+        | the other rows left: a size already taken shows "Ya en la venta" and
+        | cannot be picked again, and the quantity cannot pass what is left.
+        | The server checks the same thing when saving.
+        |
+        */
+        document.addEventListener("DOMContentLoaded", () => {
+            const form = document.getElementById("saleForm");
+            const container = document.getElementById("saleItems");
+            const tracksStock = () => (form.querySelector('input[name="doc_type"]:checked')?.value || "invoice") === "invoice";
+            let timer = null;
+
+            function inventoryRows() {
+                return [...container.querySelectorAll("[data-sale-item]")].filter(row =>
+                    row.querySelector("[data-source-select]").value !== "workshop");
+            }
+
+            function quantityOf(row) {
+                const value = Number.parseInt(row.querySelector("[data-quantity-input]").value, 10);
+                return Number.isFinite(value) && value > 0 ? value : 0;
+            }
+
+            function syncStock() {
+                const rows = inventoryRows();
+                const used = new Map();
+
+                rows.forEach(row => {
+                    const variant = row.querySelector("[data-variant-select]").value;
+
+                    if (variant !== "") {
+                        used.set(variant, (used.get(variant) || 0) + quantityOf(row));
+                    }
+                });
+
+                const checkStock = tracksStock();
+
+                rows.forEach(row => {
+                    const select = row.querySelector("[data-variant-select]");
+                    const quantityInput = row.querySelector("[data-quantity-input]");
+                    const own = select.value;
+                    const ownQuantity = quantityOf(row);
+
+                    // Left for this row = stock minus what the other rows already take.
+                    const leftFor = option => {
+                        const stock = Number(option.dataset.stock || 0);
+                        const others = (used.get(option.value) || 0) - (option.value === own ? ownQuantity : 0);
+                        return stock - others;
+                    };
+
+                    select.querySelectorAll("option[value]:not([value=''])").forEach(option => {
+                        const left = leftFor(option);
+                        option.disabled = checkStock && left <= 0 && option.value !== own;
+                    });
+
+                    row.querySelectorAll("[data-picker-option]").forEach(button => {
+                        const option = select.querySelector(`option[value="${button.dataset.value}"]`);
+
+                        if (!option) {
+                            return;
+                        }
+
+                        const stock = Number(option.dataset.stock || 0);
+                        const left = checkStock ? leftFor(option) : stock;
+                        const taken = checkStock && left <= 0 && option.value !== own && stock > 0;
+                        const badge = button.querySelector(".sale-stock-badge");
+
+                        button.disabled = stock <= 0 || taken;
+                        button.classList.toggle("is-out-of-stock", button.disabled);
+
+                        if (badge) {
+                            badge.classList.toggle("is-empty", button.disabled);
+                            badge.textContent = stock <= 0
+                                ? "Agotado"
+                                : taken
+                                    ? "Ya en la venta"
+                                    : `Stock ${Math.max(left, 0)}`;
+                        }
+                    });
+
+                    renderSizeChips(row, select, checkStock ? leftFor : option => Number(option.dataset.stock || 0));
+
+                    const ownOption = own !== "" ? select.querySelector(`option[value="${own}"]`) : null;
+                    let warning = row.querySelector("[data-stock-warning]");
+
+                    if (!ownOption || !checkStock) {
+                        warning?.remove();
+                        return;
+                    }
+
+                    const left = leftFor(ownOption);
+                    quantityInput.max = String(Math.max(left, 0));
+
+                    if (ownQuantity > left) {
+                        if (!warning) {
+                            warning = document.createElement("small");
+                            warning.className = "form-hint sale-stock-warning";
+                            warning.dataset.stockWarning = "";
+                            quantityInput.insertAdjacentElement("afterend", warning);
+                        }
+
+                        warning.textContent = left > 0
+                            ? `${left === 1 ? "Solo queda 1 par" : `Solo quedan ${left} pares`} de esta talla (contando las otras líneas).`
+                            : "Esta talla ya está completa en otra línea.";
+                    } else {
+                        warning?.remove();
+                    }
+                });
+            }
+
+            /*
+            | Other sizes of the chosen model: one click adds a pair of that
+            | size (a new row, or +1 when the size is already in the sale).
+            */
+            function renderSizeChips(row, select, leftFor) {
+                const box = row.querySelector("[data-size-chips]") || (() => {
+                    const element = document.createElement("div");
+                    element.className = "sale-size-chips";
+                    element.dataset.sizeChips = "";
+                    row.querySelector("[data-product-picker]").insertAdjacentElement("afterend", element);
+                    return element;
+                })();
+
+                const own = select.selectedOptions[0];
+
+                if (!own || own.value === "" || row.querySelector("[data-source-select]").value === "workshop") {
+                    box.hidden = true;
+                    box.innerHTML = "";
+                    return;
+                }
+
+                const siblings = [...select.options].filter(option =>
+                    option.value !== "" && option.dataset.code === own.dataset.code);
+                const colors = new Set(siblings.map(option => option.dataset.color));
+
+                // Only the first row of each model shows its sizes.
+                const firstRow = inventoryRows().find(other =>
+                    other.querySelector("[data-variant-select]").selectedOptions[0]?.dataset.code === own.dataset.code);
+
+                box.hidden = siblings.length < 2 || firstRow !== row;
+                box.innerHTML = "";
+
+                if (box.hidden) {
+                    return;
+                }
+
+                const label = document.createElement("span");
+                label.className = "sale-size-chips-label";
+                label.textContent = "Agregar otra talla:";
+                box.appendChild(label);
+
+                siblings.forEach(option => {
+                    const left = leftFor(option) - (option.value === own.value ? quantityOf(row) : 0);
+                    const chip = document.createElement("button");
+
+                    chip.type = "button";
+                    chip.className = "sale-size-chip";
+                    chip.dataset.addVariant = option.value;
+                    chip.disabled = left <= 0;
+                    chip.title = left > 0 ? `Agregar 1 par (quedan ${left})` : "Sin stock disponible";
+                    chip.innerHTML = "";
+
+                    const size = document.createElement("strong");
+                    size.textContent = (colors.size > 1 ? option.dataset.color + " " : "") + option.dataset.size;
+                    const stock = document.createElement("small");
+                    stock.textContent = left > 0 ? `+1 · quedan ${left}` : "agotado";
+                    chip.append(size, stock);
+
+                    box.appendChild(chip);
+                });
+            }
+
+            function addVariant(variantId) {
+                const rows = inventoryRows();
+                const existing = rows.find(row => row.querySelector("[data-variant-select]").value === variantId);
+
+                if (existing) {
+                    const input = existing.querySelector("[data-quantity-input]");
+                    input.value = String(quantityOf(existing) + 1);
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                    return;
+                }
+
+                let target = rows.find(row => row.querySelector("[data-variant-select]").value === "");
+
+                if (!target) {
+                    document.getElementById("addSaleItem").click();
+                    target = container.lastElementChild;
+                }
+
+                const select = target.querySelector("[data-variant-select]");
+                select.value = variantId;
+                select.dispatchEvent(new Event("change", { bubbles: true }));
+            }
+
+            container.addEventListener("click", event => {
+                const chip = event.target.closest("[data-add-variant]");
+
+                if (chip && !chip.disabled) {
+                    addVariant(chip.dataset.addVariant);
+                }
+            });
+
+            function schedule() {
+                clearTimeout(timer);
+                timer = setTimeout(syncStock, 0);
+            }
+
+            ["input", "change", "click"].forEach(type => form.addEventListener(type, schedule));
+
+            // Saving with more than the stock is stopped here too.
+            form.addEventListener("submit", event => {
+                syncStock();
+
+                const warning = container.querySelector("[data-stock-warning]");
+
+                if (warning) {
+                    event.preventDefault();
+                    event.stopImmediatePropagation();
+                    warning.closest("[data-sale-item]").querySelector("[data-quantity-input]").focus();
+                }
+            });
+
+            syncStock();
+        });
+    </script>
+    <script>
+        /*
+        |--------------------------------------------------------------------------
+        | Promotions and wholesale prices
+        |--------------------------------------------------------------------------
+        |
+        | Finds what this sale qualifies for (wholesale price when a product
+        | reaches its minimum, and the active promotions) and lists it. Nothing
+        | changes a price until the user accepts it in the dialog, and saving
+        | asks about the best pending offer first. One promotion per sale and
+        | never together with wholesale prices. The server checks it again.
+        |
+        */
+        document.addEventListener("DOMContentLoaded", () => {
+            const form = document.getElementById("saleForm");
+            const container = document.getElementById("saleItems");
+            const section = document.getElementById("saleOffers");
+            const promotionInput = document.getElementById("promotionId");
+            const appliedBox = section.querySelector("[data-offers-applied]");
+            const listBox = section.querySelector("[data-offers-list]");
+            const notesBox = section.querySelector("[data-offers-notes]");
+            const dialog = document.getElementById("saleOfferDialog");
+            const grandTotal = document.getElementById("saleGrandTotal");
+            const promotionLine = document.getElementById("salePromotionLine");
+            const discountInput = document.getElementById("discount");
+            const soldAtInput = document.getElementById("sold_at");
+            const phoneInput = document.getElementById("customer_phone");
+            const nameInput = document.getElementById("customer_name");
+            const channelSelect = document.getElementById("channel");
+
+            const promotions = <?= json_encode($salePromotions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE) ?>;
+            const checkUrl = <?= json_encode(APP_BASE_URL . '/admin/sales/promotion-check.php', JSON_HEX_TAG | JSON_UNESCAPED_SLASHES) ?>;
+            const excludeId = <?= json_encode($editData !== null ? (int) $editId : null) ?>;
+            const symbol = <?= json_encode(currency_symbol(), JSON_HEX_TAG | JSON_UNESCAPED_UNICODE) ?>;
+
+            const money = value => symbol + value.toLocaleString("en-US", {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+            const parse = value => {
+                const number = Number.parseFloat(String(value ?? "").replace(/[^0-9.]/g, ""));
+                return Number.isFinite(number) ? number : 0;
+            };
+            const round = value => Math.round(value * 100) / 100;
+            const plural = (count, one, many) => `${count} ${count === 1 ? one : many}`;
+
+            const rejected = new Set();
+            let customer = { key: null, previous: null, loading: false, failed: false };
+            let offers = [];
+            let busy = false;
+            let timer = null;
+
+            /*
+            | Rows of the sale with what each one needs.
+            */
+            function readLines() {
+                return [...container.querySelectorAll("[data-sale-item]")].map(row => {
+                    const isCustom = row.querySelector("[data-source-select]").value === "workshop";
+                    const priceInput = row.querySelector("[data-price-input]");
+                    const quantity = Math.max(0, Math.floor(parse(row.querySelector("[data-quantity-input]").value)));
+                    const price = parse(priceInput.value);
+                    let info;
+
+                    if (isCustom) {
+                        const name = row.querySelector('[name="items[custom_name][]"]').value.trim();
+
+                        if (name === "") {
+                            return null;
+                        }
+
+                        const code = row.querySelector('[name="items[custom_code][]"]').value.trim();
+                        const model = code === ""
+                            ? null
+                            : [...row.querySelectorAll("[data-custom-previous] option")].find(option => option.value === code);
+
+                        info = {
+                            name,
+                            code: code || null,
+                            category: Number(row.querySelector('[name="items[custom_category][]"]').value || 0),
+                            retail: model?.dataset.price ? parse(model.dataset.price) : null,
+                            wholesale: model?.dataset.wholesalePrice ? parse(model.dataset.wholesalePrice) : null,
+                            min: Number(model?.dataset.wholesaleMin || 0)
+                        };
+                    } else {
+                        const option = row.querySelector("[data-variant-select]").selectedOptions[0];
+
+                        if (!option || option.value === "") {
+                            return null;
+                        }
+
+                        info = {
+                            name: option.dataset.name || "Producto",
+                            code: option.dataset.code || null,
+                            category: Number(option.dataset.category || 0),
+                            retail: option.dataset.price ? parse(option.dataset.price) : null,
+                            wholesale: option.dataset.wholesalePrice ? parse(option.dataset.wholesalePrice) : null,
+                            min: Number(option.dataset.wholesaleMin || 0)
+                        };
+                    }
+
+                    const applied = row.dataset.wholesaleApplied === "1";
+
+                    return {
+                        row,
+                        priceInput,
+                        quantity,
+                        price,
+                        retailPrice: applied ? parse(row.dataset.retailPrice) : price,
+                        applied,
+                        ...info
+                    };
+                }).filter(Boolean);
+            }
+
+            function setPrice(line, value) {
+                busy = true;
+                line.priceInput.value = value.toFixed(2);
+                line.priceInput.dispatchEvent(new Event("input", { bubbles: true }));
+                busy = false;
+            }
+
+            function revertWholesale(line) {
+                setPrice(line, line.retailPrice);
+                delete line.row.dataset.wholesaleApplied;
+                delete line.row.dataset.retailPrice;
+            }
+
+            /*
+            | Wholesale: per product (all its sizes and colors together).
+            */
+            function wholesaleGroups(lines) {
+                const groups = new Map();
+
+                lines.forEach(line => {
+                    if (!line.code || line.wholesale === null) {
+                        return;
+                    }
+
+                    const group = groups.get(line.code) || {
+                        name: line.name,
+                        min: Math.max(line.min, 1),
+                        wholesale: line.wholesale,
+                        quantity: 0,
+                        lines: []
+                    };
+
+                    group.quantity += line.quantity;
+                    group.lines.push(line);
+                    groups.set(line.code, group);
+                });
+
+                return [...groups.values()];
+            }
+
+            /*
+            | Promotions: same rules as promotion_discount_for() in PHP.
+            */
+            function promotionResult(promotion, lines, useRetail) {
+                const units = [];
+
+                lines.forEach(line => {
+                    if (promotion.categories.length > 0 && !promotion.categories.includes(line.category)) {
+                        return;
+                    }
+
+                    for (let i = 0; i < line.quantity; i++) {
+                        units.push(useRetail ? line.retailPrice : line.price);
+                    }
+                });
+
+                const base = units.reduce((sum, price) => sum + price, 0);
+
+                if (promotion.type === "percent") {
+                    const discount = round(base * promotion.percent / 100);
+
+                    return {
+                        discount,
+                        detail: `${promotion.percent}% sobre ${plural(units.length, "producto", "productos")} (${money(base)}).`
+                    };
+                }
+
+                const size = promotion.bundle_qty;
+
+                if (size < 1 || units.length < size) {
+                    return { discount: 0, detail: "" };
+                }
+
+                units.sort((a, b) => b - a);
+
+                const bundles = Math.floor(units.length / size);
+                const bundled = units.slice(0, bundles * size).reduce((sum, price) => sum + price, 0);
+                const discount = Math.max(0, round(bundled - bundles * promotion.bundle_price));
+
+                return {
+                    discount,
+                    detail: `${plural(bundles, "paquete", "paquetes")} de ${size}: ${money(bundled)} pasa a ${money(bundles * promotion.bundle_price)}.`
+                };
+            }
+
+            function promotionStatus(promotion) {
+                const date = (soldAtInput.value || "").slice(0, 10);
+
+                if (!promotion.kept && date !== "") {
+                    if ((promotion.starts_on && date < promotion.starts_on) || (promotion.ends_on && date > promotion.ends_on)) {
+                        return "date";
+                    }
+                }
+
+                if (promotion.first_purchase_only) {
+                    if (customer.loading || customer.key !== customerKey()) {
+                        return "checking";
+                    }
+
+                    if (customer.failed || customer.previous === null) {
+                        return "need-customer";
+                    }
+
+                    if (customer.previous === true) {
+                        return "returning";
+                    }
+                }
+
+                return "ok";
+            }
+
+            /*
+            | First purchase: asks the server whether the customer bought before.
+            */
+            function customerKey() {
+                return phoneInput.value.trim() + "|" + nameInput.value.trim().toLowerCase();
+            }
+
+            async function checkCustomer() {
+                const key = customerKey();
+
+                if (key === "|") {
+                    customer = { key, previous: null, loading: false, failed: false };
+                    refresh();
+                    return;
+                }
+
+                customer = { key, previous: null, loading: true, failed: false };
+                refresh();
+
+                const params = new URLSearchParams({
+                    phone: phoneInput.value.trim(),
+                    name: nameInput.value.trim()
+                });
+
+                if (excludeId) {
+                    params.set("exclude", excludeId);
+                }
+
+                let result = { key, previous: null, loading: false, failed: true };
+
+                try {
+                    const response = await fetch(checkUrl + "?" + params.toString(), { credentials: "same-origin" });
+                    const data = await response.json();
+
+                    result = { key, previous: data.previous, loading: false, failed: false };
+                } catch (error) {
+                    // Leave failed: the promotion is not offered.
+                }
+
+                if (customerKey() === key) {
+                    customer = result;
+                    refresh();
+                }
+            }
+
+            /*
+            | Everything is recalculated from the form each time.
+            */
+            function refresh() {
+                const notes = [];
+                let lines = readLines();
+
+                // Wholesale rows that no longer reach the minimum go back to the normal price.
+                wholesaleGroups(lines).forEach(group => {
+                    if (group.quantity >= group.min) {
+                        return;
+                    }
+
+                    const appliedLines = group.lines.filter(line => line.applied);
+
+                    if (appliedLines.length > 0) {
+                        appliedLines.forEach(revertWholesale);
+                        notes.push(`${group.name}: el precio mayorista es desde ${group.min} pares y lleva ${group.quantity}. Volvió al precio normal.`);
+                    }
+                });
+
+                lines = readLines();
+
+                const manual = parse(discountInput.value);
+                const groups = wholesaleGroups(lines);
+                const wholesaleApplied = lines.filter(line => line.applied);
+
+                // The accepted promotion is kept only while it still applies.
+                let applied = promotions.find(promotion => String(promotion.id) === promotionInput.value) || null;
+                let appliedResult = { discount: 0, detail: "" };
+
+                if (promotionInput.value !== "" && !applied) {
+                    promotionInput.value = "";
+                }
+
+                if (applied) {
+                    const status = promotionStatus(applied);
+                    appliedResult = promotionResult(applied, lines, false);
+
+                    if (status !== "checking" && (status !== "ok" || appliedResult.discount <= 0)) {
+                        const reasons = {
+                            date: "no está vigente en la fecha de la venta",
+                            "need-customer": "es solo para la primera compra y falta el teléfono o nombre del cliente",
+                            returning: "es solo para la primera compra y este cliente ya compró antes"
+                        };
+
+                        notes.push(`Se quitó la promoción "${applied.name}": ${reasons[status] || "ya no aplica a los productos de la venta"}.`);
+                        promotionInput.value = "";
+                        applied = null;
+                        appliedResult = { discount: 0, detail: "" };
+                    }
+                }
+
+                const subtotal = lines.reduce((sum, line) => sum + line.quantity * line.price, 0);
+                const retailSubtotal = lines.reduce((sum, line) => sum + line.quantity * line.retailPrice, 0);
+                const current = Math.max(round(subtotal - manual - appliedResult.discount), 0);
+
+                grandTotal.textContent = money(current);
+
+                if (applied) {
+                    promotionLine.hidden = false;
+                    promotionLine.textContent = `Incluye "${applied.name}": -${money(appliedResult.discount)}`;
+                } else if (wholesaleApplied.length > 0) {
+                    promotionLine.hidden = false;
+                    promotionLine.textContent = "Con precio mayorista";
+                } else {
+                    promotionLine.hidden = true;
+                }
+
+                // Offers.
+                offers = [];
+
+                const eligible = groups.filter(group => group.quantity >= group.min);
+                const wholesaleSaving = eligible.reduce((sum, group) =>
+                    sum + group.lines.reduce((lineSum, line) =>
+                        lineSum + Math.max(0, line.retailPrice - group.wholesale) * line.quantity, 0), 0);
+
+                if (wholesaleSaving > 0) {
+                    const after = Math.max(round(retailSubtotal - wholesaleSaving - manual), 0);
+
+                    if (current - after > 0.004) {
+                        offers.push({
+                            key: "wholesale",
+                            eyebrow: "¿APLICAR PRECIO MAYORISTA?",
+                            title: "Precio mayorista",
+                            detail: eligible.map(group =>
+                                `${group.name}: ${plural(group.quantity, "par", "pares")} a ${money(group.wholesale)} c/u (mínimo ${group.min}).`
+                            ).join(" "),
+                            warning: applied ? `Se quita la promoción "${applied.name}": no se juntan.` : "",
+                            after,
+                            saving: round(current - after),
+                            apply() {
+                                promotionInput.value = "";
+                                eligible.forEach(group => group.lines.forEach(line => {
+                                    if (line.applied || line.retailPrice <= group.wholesale) {
+                                        return;
+                                    }
+
+                                    line.row.dataset.retailPrice = line.retailPrice.toFixed(2);
+                                    line.row.dataset.wholesaleApplied = "1";
+                                    setPrice(line, group.wholesale);
+                                }));
+                            }
+                        });
+                    }
+                }
+
+                if (channelSelect.value === "wholesale") {
+                    groups.filter(group => group.quantity < group.min).forEach(group => {
+                        notes.push(`${group.name}: faltan ${group.min - group.quantity} pares para el precio mayorista (desde ${group.min}).`);
+                    });
+                }
+
+                promotions.forEach(promotion => {
+                    if (applied && promotion.id === applied.id) {
+                        return;
+                    }
+
+                    const result = promotionResult(promotion, lines, true);
+
+                    if (result.discount <= 0) {
+                        return;
+                    }
+
+                    const status = promotionStatus(promotion);
+
+                    if (status === "date") {
+                        return;
+                    }
+
+                    if (status === "checking") {
+                        notes.push(`Verificando si es la primera compra del cliente para "${promotion.name}"…`);
+                        return;
+                    }
+
+                    if (status === "need-customer") {
+                        notes.push(`"${promotion.name}" es solo para la primera compra: escribe el teléfono o el nombre del cliente para verificarlo.`);
+                        return;
+                    }
+
+                    if (status === "returning") {
+                        notes.push(`"${promotion.name}" no aplica: este cliente ya compró antes.`);
+                        return;
+                    }
+
+                    const after = Math.max(round(retailSubtotal - manual - result.discount), 0);
+
+                    if (current - after <= 0.004) {
+                        return;
+                    }
+
+                    offers.push({
+                        key: "promotion-" + promotion.id,
+                        eyebrow: "¿APLICAR PROMOCIÓN?",
+                        title: promotion.name,
+                        detail: `${promotion.summary}. ${result.detail}`,
+                        warning: [
+                            wholesaleApplied.length > 0 ? "Se quita el precio mayorista: no se juntan." : "",
+                            applied ? `Reemplaza la promoción "${applied.name}".` : ""
+                        ].filter(Boolean).join(" "),
+                        after,
+                        saving: round(current - after),
+                        apply() {
+                            readLines().filter(line => line.applied).forEach(revertWholesale);
+                            promotionInput.value = String(promotion.id);
+                        }
+                    });
+                });
+
+                offers.sort((a, b) => b.saving - a.saving);
+
+                render(applied, appliedResult, wholesaleApplied, notes, current);
+            }
+
+            function render(applied, appliedResult, wholesaleApplied, notes, current) {
+                appliedBox.innerHTML = "";
+                listBox.innerHTML = "";
+                notesBox.innerHTML = "";
+
+                const card = (className, title, detail, side, button) => {
+                    const element = document.createElement("div");
+                    element.className = "sale-offer " + className;
+
+                    const info = document.createElement("div");
+                    info.className = "sale-offer-info";
+
+                    const strong = document.createElement("strong");
+                    strong.textContent = title;
+                    const small = document.createElement("small");
+                    small.textContent = detail;
+                    info.append(strong, small);
+
+                    const aside = document.createElement("div");
+                    aside.className = "sale-offer-side";
+
+                    if (side) {
+                        const amount = document.createElement("span");
+                        amount.className = "sale-offer-amount";
+                        amount.textContent = side;
+                        aside.appendChild(amount);
+                    }
+
+                    aside.appendChild(button);
+                    element.append(info, aside);
+
+                    return element;
+                };
+
+                const button = (label, data, outline = true) => {
+                    const element = document.createElement("button");
+                    element.type = "button";
+                    element.className = "admin-button" + (outline ? " admin-button-outline" : "");
+                    element.textContent = label;
+                    Object.entries(data).forEach(([key, value]) => element.dataset[key] = value);
+                    return element;
+                };
+
+                if (applied) {
+                    appliedBox.appendChild(card(
+                        "is-applied",
+                        `Promoción aplicada: ${applied.name}`,
+                        `${applied.summary}. ${appliedResult.detail}`,
+                        `-${money(appliedResult.discount)}`,
+                        button("QUITAR", { offerRemove: "promotion" })
+                    ));
+                }
+
+                if (wholesaleApplied.length > 0) {
+                    const names = [...new Set(wholesaleApplied.map(line => line.name))].join(", ");
+                    const saving = wholesaleApplied.reduce((sum, line) => sum + (line.retailPrice - line.price) * line.quantity, 0);
+
+                    appliedBox.appendChild(card(
+                        "is-applied",
+                        "Precio mayorista aplicado",
+                        names,
+                        `-${money(round(saving))}`,
+                        button("QUITAR", { offerRemove: "wholesale" })
+                    ));
+                }
+
+                offers.forEach((offer, index) => {
+                    const element = card(
+                        index === 0 && offers.length > 1 ? "is-best" : "",
+                        offer.title + (index === 0 && offers.length > 1 ? " · la más conveniente" : ""),
+                        offer.detail + (rejected.has(offer.key) ? " (no aplicada)" : ""),
+                        `Total ${money(offer.after)} · ahorra ${money(offer.saving)}`,
+                        button("APLICAR…", { offerKey: offer.key }, index !== 0)
+                    );
+
+                    listBox.appendChild(element);
+                });
+
+                notes.forEach(note => {
+                    const item = document.createElement("li");
+                    item.textContent = note;
+                    notesBox.appendChild(item);
+                });
+
+                section.hidden = !applied && wholesaleApplied.length === 0 && offers.length === 0 && notes.length === 0;
+            }
+
+            /*
+            | Confirmation dialog.
+            */
+            function confirmOffer(offer, onDone) {
+                const current = grandTotal.textContent;
+
+                dialog.querySelector("[data-dialog-eyebrow]").textContent = offer.eyebrow;
+                dialog.querySelector("[data-dialog-title]").textContent = offer.title;
+                dialog.querySelector("[data-dialog-detail]").textContent = offer.detail;
+                dialog.querySelector("[data-dialog-before]").textContent = current;
+                dialog.querySelector("[data-dialog-after]").textContent = money(offer.after);
+                dialog.querySelector("[data-dialog-saving]").textContent = money(offer.saving);
+
+                const warning = dialog.querySelector("[data-dialog-warning]");
+                warning.textContent = offer.warning;
+                warning.hidden = offer.warning === "";
+
+                dialog.returnValue = "";
+                dialog.onclose = () => {
+                    // Escape closes without an answer: nothing changes and nothing is saved.
+                    if (dialog.returnValue === "") {
+                        refresh();
+                        return;
+                    }
+
+                    if (dialog.returnValue === "accept") {
+                        rejected.delete(offer.key);
+                        offer.apply();
+                    } else {
+                        rejected.add(offer.key);
+                    }
+
+                    refresh();
+                    onDone?.(dialog.returnValue === "accept");
+                };
+
+                if (typeof dialog.showModal === "function") {
+                    dialog.showModal();
+                } else {
+                    dialog.returnValue = window.confirm(
+                        `${offer.title}\n${offer.detail}\nNuevo total: ${money(offer.after)} (ahorra ${money(offer.saving)})\n\n¿Aplicar?`
+                    ) ? "accept" : "reject";
+                    dialog.onclose();
+                }
+            }
+
+            section.addEventListener("click", event => {
+                const apply = event.target.closest("[data-offer-key]");
+
+                if (apply) {
+                    const offer = offers.find(item => item.key === apply.dataset.offerKey);
+
+                    if (offer) {
+                        confirmOffer(offer);
+                    }
+
+                    return;
+                }
+
+                const remove = event.target.closest("[data-offer-remove]");
+
+                if (!remove) {
+                    return;
+                }
+
+                if (remove.dataset.offerRemove === "promotion") {
+                    rejected.add("promotion-" + promotionInput.value);
+                    promotionInput.value = "";
+                } else {
+                    readLines().filter(line => line.applied).forEach(revertWholesale);
+                    rejected.add("wholesale");
+                }
+
+                refresh();
+            });
+
+            // Saving asks about the best offer nobody answered yet.
+            form.addEventListener("submit", event => {
+                refresh();
+
+                const somethingApplied = promotionInput.value !== "" || readLines().some(line => line.applied);
+                const pending = offers.filter(offer => !rejected.has(offer.key));
+
+                if (somethingApplied || pending.length === 0) {
+                    return;
+                }
+
+                event.preventDefault();
+                section.hidden = false;
+
+                confirmOffer(pending[0], () => {
+                    if (typeof form.requestSubmit === "function") {
+                        form.requestSubmit();
+                    } else {
+                        form.submit();
+                    }
+                });
+            });
+
+            function schedule() {
+                if (busy) {
+                    return;
+                }
+
+                clearTimeout(timer);
+                timer = setTimeout(refresh, 0);
+            }
+
+            ["input", "change", "click"].forEach(type => form.addEventListener(type, schedule));
+
+            let customerTimer = null;
+
+            [phoneInput, nameInput].forEach(input => input.addEventListener("input", () => {
+                if (!promotions.some(promotion => promotion.first_purchase_only)) {
+                    return;
+                }
+
+                clearTimeout(customerTimer);
+                customerTimer = setTimeout(checkCustomer, 400);
+            }));
+
+            // Rows that come back with their wholesale price (edit, or a save error).
+            readLines().forEach(line => {
+                if (line.wholesale !== null && line.retail !== null && line.retail > line.wholesale &&
+                    Math.abs(line.price - line.wholesale) < 0.005) {
+                    line.row.dataset.retailPrice = line.retail.toFixed(2);
+                    line.row.dataset.wholesaleApplied = "1";
+                }
+            });
+
+            if (promotions.some(promotion => promotion.first_purchase_only)) {
+                checkCustomer();
+            } else {
+                refresh();
+            }
         });
     </script>
 <?php endif; ?>

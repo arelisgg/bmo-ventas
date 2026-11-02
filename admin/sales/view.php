@@ -764,6 +764,12 @@ render_sales_layout_start(
 
                         <dt>
                             Descuento
+                            <?php if (!empty($sale['promotion_name'])): ?>
+                                <small class="sale-promotion-note">
+                                    Incluye promoción "<?= e($sale['promotion_name']) ?>":
+                                    -<?= e(format_money($sale['promotion_discount'])) ?>
+                                </small>
+                            <?php endif; ?>
                         </dt>
 
                         <dd class="sale-discount">

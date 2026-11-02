@@ -41,8 +41,41 @@ $statisticsStatement = $pdo->query(
                 0
             )
             FROM product_variants
-        ) AS total_stock'
+        ) AS total_stock,
+
+        (
+            SELECT COALESCE(
+                SUM(pv.stock * p.price),
+                0
+            )
+            FROM product_variants pv
+            INNER JOIN products p
+                ON p.id = pv.product_id
+            WHERE p.is_active = 1
+                AND p.price IS NOT NULL
+        ) AS stock_value'
 );
+
+/*
+|--------------------------------------------------------------------------
+| Promotions In Effect Today
+|--------------------------------------------------------------------------
+*/
+
+require_once __DIR__ . '/../includes/promotion-functions.php';
+
+$promotionsReady = promotion_tables_exist($pdo) && admin_can('promotions');
+$currentPromotions = 0;
+
+if ($promotionsReady) {
+    $today = date('Y-m-d');
+
+    foreach (load_promotions($pdo, true) as $promotion) {
+        if (promotion_is_current($promotion, $today)) {
+            $currentPromotions++;
+        }
+    }
+}
 
 $statistics =
     $statisticsStatement->fetch();
@@ -59,8 +92,11 @@ $salesStatistics = [
     'today_total' => 0,
     'today_count' => 0,
     'month_total' => 0,
+    'week_total' => 0,
+    'week_count' => 0,
     'month_count' => 0,
     'pending_total' => 0,
+    'pending_count' => 0,
 ];
 
 if ($salesReady) {
@@ -70,7 +106,10 @@ if ($salesReady) {
             COALESCE(SUM(CASE WHEN sold_at >= CURDATE() THEN 1 ELSE 0 END), 0) AS today_count,
             COALESCE(SUM(CASE WHEN sold_at >= DATE_FORMAT(CURDATE(), \'%Y-%m-01\') THEN total ELSE 0 END), 0) AS month_total,
             COALESCE(SUM(CASE WHEN sold_at >= DATE_FORMAT(CURDATE(), \'%Y-%m-01\') THEN 1 ELSE 0 END), 0) AS month_count,
-            COALESCE(SUM(CASE WHEN status = \'pending\' THEN total ELSE 0 END), 0) AS pending_total
+            COALESCE(SUM(CASE WHEN sold_at >= CURDATE() - INTERVAL WEEKDAY(CURDATE()) DAY THEN total ELSE 0 END), 0) AS week_total,
+            COALESCE(SUM(CASE WHEN sold_at >= CURDATE() - INTERVAL WEEKDAY(CURDATE()) DAY THEN 1 ELSE 0 END), 0) AS week_count,
+            COALESCE(SUM(CASE WHEN status = \'pending\' THEN total ELSE 0 END), 0) AS pending_total,
+            COALESCE(SUM(CASE WHEN status = \'pending\' THEN 1 ELSE 0 END), 0) AS pending_count
          FROM sales
          WHERE status != \'cancelled\' AND doc_type = \'invoice\''
     )->fetch() ?: $salesStatistics;
@@ -331,167 +370,57 @@ $lowStockVariants =
              ===================================================== -->
 
             <div class="dashboard-stat-grid">
-<?php if ($salesReady && admin_can('sales')): ?>
+<?php
+$base = e(APP_BASE_URL);
+$statCards = [];
+
+if ($salesReady && admin_can('sales')) {
+    $statCards[] = ['Ventas de hoy', format_money($salesStatistics['today_total']), true,
+        (int) $salesStatistics['today_count'] . ' venta(s)', null];
+    $statCards[] = ['Ventas de la semana', format_money($salesStatistics['week_total']), true,
+        (int) $salesStatistics['week_count'] . ' venta(s) desde el lunes', null];
+    $statCards[] = ['Ventas del mes', format_money($salesStatistics['month_total']), true,
+        (int) $salesStatistics['month_count'] . ' venta(s) · Ver ventas →', $base . '/admin/sales/'];
+    $statCards[] = ['Pendiente de cobro', format_money($salesStatistics['pending_total']), true,
+        (int) $salesStatistics['pending_count'] > 0
+            ? (int) $salesStatistics['pending_count'] . ' venta(s) · Ver pendientes →'
+            : 'Nada pendiente',
+        (int) $salesStatistics['pending_count'] > 0 ? $base . '/admin/sales/?status=pending&amp;from=2000-01-01' : null];
+}
+
+$statCards[] = ['Modelos', (string) (int) $statistics['total_products'], false,
+    'Administrar modelos →', $base . '/admin/products/'];
+$statCards[] = ['Modelos activos', (string) (int) $statistics['active_products'], false,
+    'Visibles en el catálogo', null];
+$statCards[] = ['Categorías', (string) (int) $statistics['active_categories'], false,
+    admin_can('categories') ? 'Administrar categorías →' : 'Activas en el catálogo',
+    admin_can('categories') ? $base . '/admin/categories/' : null];
+
+if ($promotionsReady) {
+    $statCards[] = ['Promociones vigentes', (string) $currentPromotions, false,
+        'Administrar promociones →', $base . '/admin/promotions/'];
+}
+
+$statCards[] = ['Pares en stock', (string) (int) $statistics['total_stock'], false,
+    'Ver inventario →', $base . '/admin/inventory/'];
+$statCards[] = ['Valor del inventario', format_money($statistics['stock_value']), true,
+    'Pares en stock × precio de venta', null];
+$statCards[] = ['Stock bajo', (string) count($lowStockProducts), false,
+    'Modelos con 1 a 5 pares', null];
+$statCards[] = ['Agotados', (string) count($outOfStockProducts), false,
+    'Modelos activos sin pares', null];
+?>
+<?php foreach ($statCards as [$label, $value, $isMoney, $note, $link]): ?>
                 <article class="dashboard-stat-card">
-                    <span class="dashboard-stat-label">
-                        Ventas de hoy
-                    </span>
-                    <strong class="dashboard-stat-value dashboard-stat-money">
-                        <?= e(format_money($salesStatistics['today_total'])) ?>
-                    </strong>
-                    <span class="dashboard-stat-note">
-                        <?= (int) $salesStatistics['today_count'] ?> venta(s)
-                    </span>
-                </article>
-                <article class="dashboard-stat-card">
-                    <span class="dashboard-stat-label">
-                        Ventas del mes
-                    </span>
-                    <strong class="dashboard-stat-value dashboard-stat-money">
-                        <?= e(format_money($salesStatistics['month_total'])) ?>
-                    </strong>
-                    <a href="<?= e(APP_BASE_URL) ?>/admin/sales/">
-                        <?= (int) $salesStatistics['month_count'] ?> venta(s) · Ver ventas →
-                    </a>
-                </article>
-<?php if ((float) $salesStatistics['pending_total'] > 0): ?>
-                <article class="dashboard-stat-card">
-                    <span class="dashboard-stat-label">
-                        Pendiente de cobro
-                    </span>
-                    <strong class="dashboard-stat-value dashboard-stat-money">
-                        <?= e(format_money($salesStatistics['pending_total'])) ?>
-                    </strong>
-                    <a href="<?= e(APP_BASE_URL) ?>/admin/sales/?status=pending&amp;from=2000-01-01">
-                        Ver pendientes →
-                    </a>
-                </article>
+                    <span class="dashboard-stat-label"><?= e($label) ?></span>
+                    <strong class="dashboard-stat-value<?= $isMoney ? ' dashboard-stat-money' : '' ?>"><?= e($value) ?></strong>
+<?php if ($link !== null): ?>
+                    <a href="<?= $link ?>"><?= e($note) ?></a>
+<?php else: ?>
+                    <span class="dashboard-stat-note"><?= e($note) ?></span>
 <?php endif; ?>
-<?php endif; ?>
-                <article class="dashboard-stat-card">
-
-                    <span class="dashboard-stat-label">
-                        Productos
-                    </span>
-
-                    <strong class="dashboard-stat-value">
-
-                        <?= (int) 
-                            $statistics[
-                                'total_products'
-                            ]
-                            ?>
-
-                    </strong>
-
-                    <a href="<?= e(APP_BASE_URL) ?>/admin/products/">
-                        Administrar productos →
-                    </a>
-
                 </article>
-                <article class="dashboard-stat-card">
-
-                    <span class="dashboard-stat-label">
-                        Productos activos
-                    </span>
-
-                    <strong class="dashboard-stat-value">
-
-                        <?= (int) 
-                            $statistics[
-                                'active_products'
-                            ]
-                            ?>
-
-                    </strong>
-
-                    <span class="dashboard-stat-note">
-                        Visibles en el catálogo
-                    </span>
-
-                </article>
-                <article class="dashboard-stat-card">
-
-                    <span class="dashboard-stat-label">
-                        Stock total
-                    </span>
-
-                    <strong class="dashboard-stat-value">
-
-                        <?= (int) 
-                            $statistics[
-                                'total_stock'
-                            ]
-                            ?>
-
-                    </strong>
-
-                    <a href="<?= e(APP_BASE_URL) ?>/admin/inventory/">
-                        Administrar inventario →
-                    </a>
-
-                </article>
-                <article class="dashboard-stat-card">
-
-                    <span class="dashboard-stat-label">
-                        Stock bajo
-                    </span>
-
-                    <strong class="dashboard-stat-value">
-
-                        <?= count(
-                            $lowStockProducts
-                        ) ?>
-
-                    </strong>
-
-                    <span class="dashboard-stat-note">
-                        Entre 1 y 5 unidades disponibles
-                    </span>
-
-                </article>
-                <article class="dashboard-stat-card">
-
-                    <span class="dashboard-stat-label">
-                        Agotados
-                    </span>
-
-                    <strong class="dashboard-stat-value">
-
-                        <?= count(
-                            $outOfStockProducts
-                        ) ?>
-
-                    </strong>
-
-                    <span class="dashboard-stat-note">
-                        Productos activos sin existencias
-                    </span>
-
-                </article>
-                <article class="dashboard-stat-card">
-
-                    <span class="dashboard-stat-label">
-                        Categorías
-                    </span>
-
-                    <strong class="dashboard-stat-value">
-
-                        <?= (int) 
-                            $statistics[
-                                'active_categories'
-                            ]
-                            ?>
-
-                    </strong>
-
-                    <?php if (admin_can('categories')): ?>
-                        <a href="<?= e(APP_BASE_URL) ?>/admin/categories/">
-                            Administrar categorías →
-                        </a>
-                    <?php endif; ?>
-
-                </article>
+<?php endforeach; ?>
             </div>
             <!-- =====================================================
              MAIN DASHBOARD GRID

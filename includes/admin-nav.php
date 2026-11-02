@@ -25,6 +25,7 @@ function admin_nav_items(): array
         'categories' => ['Categorías', '/admin/categories/'],
         'inventory' => ['Inventario', '/admin/inventory/'],
         'sales' => ['Ventas', '/admin/sales/'],
+        'promotions' => ['Promociones', '/admin/promotions/'],
         'cash' => ['Caja', '/admin/cash/'],
         'finance' => ['Finanzas', '/admin/finance/'],
         'workshop' => ['Pedidos al taller', '/admin/workshop/'],

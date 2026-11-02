@@ -6716,3 +6716,462 @@ table.admin-table tbody tr[hidden] {
     cursor: not-allowed;
     opacity: 0.55;
 }
+
+
+/* =========================================================
+   PROMOCIONES Y PRECIO MAYORISTA (ventas)
+   ========================================================= */
+
+[data-promotion-field][hidden] {
+    display: none;
+}
+
+.promotion-form {
+    padding: 20px 24px 24px;
+}
+
+.promotion-form .finance-expense-actions {
+    margin-top: 18px;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.promotion-actions {
+    white-space: nowrap;
+}
+
+.promotion-actions form {
+    display: inline;
+    margin-left: 12px;
+}
+
+.sale-offers-applied,
+.sale-offers-list {
+    display: grid;
+    gap: 10px;
+}
+
+.sale-offers-list:not(:empty),
+.sale-offers-applied:not(:empty) {
+    margin-bottom: 14px;
+}
+
+.sale-offer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 14px 16px;
+    border: 1px solid var(--admin-border);
+    background: var(--admin-surface);
+}
+
+.sale-offer.is-best {
+    border-color: var(--admin-accent);
+}
+
+.sale-offer.is-applied {
+    background: var(--success-bg);
+    border-color: transparent;
+    color: var(--success-text);
+}
+
+.sale-offer-info strong {
+    display: block;
+    font-size: 0.86rem;
+    font-weight: 600;
+}
+
+.sale-offer-info small {
+    display: block;
+    margin-top: 3px;
+    color: var(--admin-muted);
+    font-size: 0.74rem;
+    line-height: 1.45;
+}
+
+.sale-offer.is-applied .sale-offer-info small {
+    color: inherit;
+}
+
+.sale-offer-side {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+}
+
+.sale-offer-amount {
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.sale-offers-notes {
+    margin: 0 0 10px;
+    padding-left: 18px;
+    color: var(--admin-muted);
+    font-size: 0.76rem;
+    line-height: 1.6;
+}
+
+.sale-offers-notes:empty {
+    display: none;
+}
+
+.sale-save-promotion {
+    display: block;
+    margin-top: 3px;
+    color: var(--success-text);
+    font-size: 0.72rem;
+}
+
+.sale-promotion-note {
+    display: block;
+    margin-top: 2px;
+    color: var(--admin-muted);
+    font-size: 0.7rem;
+    font-weight: 400;
+}
+
+.sale-offer-dialog {
+    width: min(440px, calc(100vw - 32px));
+    padding: 26px;
+    border: 0;
+    color: var(--admin-text);
+    background: var(--admin-surface);
+    box-shadow: 0 18px 50px rgba(29, 26, 24, 0.22);
+}
+
+.sale-offer-dialog::backdrop {
+    background: rgba(29, 26, 24, 0.45);
+}
+
+.sale-offer-dialog h2 {
+    margin: 6px 0 8px;
+    font-family: "Cormorant Garamond", serif;
+    font-size: 1.6rem;
+    font-weight: 600;
+}
+
+.sale-offer-dialog p {
+    margin: 0 0 14px;
+    color: var(--admin-muted);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.sale-offer-dialog-prices {
+    margin: 0 0 16px;
+    display: grid;
+    gap: 8px;
+}
+
+.sale-offer-dialog-prices div {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.84rem;
+}
+
+.sale-offer-dialog-prices dt {
+    color: var(--admin-muted);
+}
+
+.sale-offer-dialog-prices dd {
+    margin: 0;
+    font-weight: 600;
+}
+
+.sale-offer-dialog-prices div:last-child dd {
+    color: var(--success-text);
+}
+
+.sale-offer-dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 18px;
+}
+
+@media (max-width: 700px) {
+    .sale-offer {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .sale-offer-side {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .sale-offer-side .admin-button {
+        width: 100%;
+    }
+
+    .sale-offer-dialog-actions .admin-button {
+        flex: 1;
+    }
+}
+
+.sale-stock-warning {
+    display: block;
+    margin-top: 6px;
+    color: var(--error-text);
+}
+
+
+.sale-size-chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.sale-size-chips[hidden] {
+    display: none;
+}
+
+.sale-size-chips-label {
+    margin-right: 4px;
+    color: var(--admin-muted);
+    font-size: 0.7rem;
+}
+
+.sale-size-chip {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 54px;
+    padding: 5px 9px;
+    border: 1px solid var(--admin-border);
+    background: var(--admin-surface);
+    color: var(--admin-text);
+    font: inherit;
+    cursor: pointer;
+}
+
+.sale-size-chip:hover:not(:disabled) {
+    border-color: var(--admin-accent);
+}
+
+.sale-size-chip strong {
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.sale-size-chip small {
+    color: var(--admin-muted);
+    font-size: 0.62rem;
+}
+
+.sale-size-chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+}
+
+
+.promotion-image-field {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+}
+
+.promotion-image-preview {
+    width: 90px;
+    aspect-ratio: 9 / 16;
+    object-fit: cover;
+    border: 1px solid var(--admin-border);
+}
+
+.promotion-image-remove {
+    margin-top: 8px;
+}
+
+.promotion-thumb {
+    float: left;
+    width: 38px;
+    height: 56px;
+    margin-right: 12px;
+    object-fit: cover;
+}
+
+
+.product-order-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    margin-bottom: 16px;
+    padding: 14px 18px;
+    border: 1px solid var(--admin-border);
+    background: var(--admin-surface);
+}
+
+.product-order-bar p {
+    margin: 0;
+    color: var(--admin-muted);
+    font-size: 0.78rem;
+    line-height: 1.5;
+}
+
+.product-order-bar strong {
+    color: var(--admin-text);
+}
+
+.product-order-input {
+    width: 72px;
+    min-height: 38px;
+    padding: 6px 8px;
+    text-align: center;
+}
+
+@media (max-width: 700px) {
+    .product-order-bar {
+        align-items: stretch;
+        flex-direction: column;
+    }
+}
+
+
+/* =========================================================
+   SPACING PASS (2026-11): one padding rule for every panel
+   Header and body share the same side padding (24px) and
+   every body block has air under the header line.
+   ========================================================= */
+
+:root {
+    --panel-x: 24px;
+    --panel-y: 22px;
+}
+
+.dashboard-panel-header {
+    padding: 20px var(--panel-x);
+    gap: 16px;
+}
+
+.dashboard-panel-header > a {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+/* Body blocks placed straight after a panel header */
+.cash-form,
+.finance-expense-form,
+.promotion-form,
+.sale-actions,
+.settings-panel .form-grid {
+    padding: var(--panel-y) var(--panel-x) 24px;
+}
+
+.cash-empty,
+.finance-empty {
+    margin: 0;
+    padding: var(--panel-y) var(--panel-x) 24px;
+    font-size: 0.82rem;
+    line-height: 1.6;
+}
+
+.sale-view-meta-section,
+.sale-view-summary {
+    padding: 18px var(--panel-x);
+}
+
+.sales-top-list {
+    padding: 0 var(--panel-x) 14px;
+}
+
+.backups-help {
+    padding: var(--panel-y) var(--panel-x) 24px 44px;
+}
+
+.settings-panel > .form-hint {
+    margin: -12px 0 0;
+    padding: 0 var(--panel-x) 22px;
+}
+
+.settings-panel form > .settings-actions {
+    padding: 0 var(--panel-x) 24px;
+}
+
+/* Tables inside panels line up with the panel title */
+.dashboard-panel .admin-table-wrapper,
+.dashboard-panel .dashboard-table-wrapper {
+    margin: 0;
+    border: 0;
+    box-shadow: none;
+}
+
+.dashboard-panel .admin-table th:first-child,
+.dashboard-panel .admin-table td:first-child,
+.dashboard-panel .dashboard-table th:first-child,
+.dashboard-panel .dashboard-table td:first-child {
+    padding-left: var(--panel-x);
+}
+
+.dashboard-panel .admin-table th:last-child,
+.dashboard-panel .admin-table td:last-child,
+.dashboard-panel .dashboard-table th:last-child,
+.dashboard-panel .dashboard-table td:last-child {
+    padding-right: var(--panel-x);
+}
+
+/* Product create / edit: color blocks */
+.product-create-side .form-section {
+    margin-bottom: 0;
+}
+
+.color-block .color-details-grid {
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.color-block .stock-title {
+    margin: 0 0 10px;
+}
+
+.color-block .color-block-header {
+    margin-bottom: 14px;
+}
+
+.product-create-side .color-details-grid input[type="color"] {
+    height: 46px;
+    min-height: 46px;
+    padding: 5px;
+    cursor: pointer;
+}
+
+.stock-item label {
+    display: block;
+    margin-bottom: 5px;
+}
+
+.form-hint {
+    margin-top: 7px;
+}
+
+
+/* Sections stacked inside form layouts: the grid gap sets the space */
+.product-create-grid .form-section,
+.category-create-grid .form-section,
+.category-create-side .form-section {
+    margin-bottom: 0;
+}
+
+.product-create-grid,
+.category-create-grid,
+.category-create-side {
+    gap: 24px;
+}
+
+@media (max-width: 700px) {
+    :root {
+        --panel-x: 18px;
+        --panel-y: 18px;
+    }
+
+    .backups-help {
+        padding-left: 36px;
+    }
+}

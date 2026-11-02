@@ -483,6 +483,7 @@ if (
                     $pdo->lastInsertId();
                 save_product_wholesale($pdo, $productId, $wholesaleValues);
                 save_product_cost($pdo, $productId, $costValues);
+                save_product_sort_order($pdo, $productId, product_sort_order_from_post());
                 /*
                 |--------------------------------------------------------------------------
                 | Product Variants
@@ -1035,6 +1036,8 @@ if (
                 </div>
 
             </section>
+
+            <?php render_product_sort_field($_SERVER['REQUEST_METHOD'] === 'POST' ? product_sort_order_from_post() : 0); ?>
 
             <section class="form-section">
 

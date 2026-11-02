@@ -477,3 +477,50 @@ function upload_product_gallery_images(
         throw $exception;
     }
 }
+
+
+/*
+|--------------------------------------------------------------------------
+| Catalog Order
+|--------------------------------------------------------------------------
+|
+| products.sort_order: 1, 2, 3… show first in the catalog; 0 (empty) =
+| no order, shown after them in random order.
+|
+*/
+
+function product_sort_order_from_post(): int
+{
+    $order = filter_var(
+        trim((string) ($_POST['sort_order'] ?? '')),
+        FILTER_VALIDATE_INT,
+        ['options' => ['min_range' => 0, 'max_range' => 100000]]
+    );
+
+    return $order === false ? 0 : $order;
+}
+
+function save_product_sort_order(PDO $pdo, int $productId, int $order): void
+{
+    $pdo->prepare('UPDATE products SET sort_order = :sort_order WHERE id = :id')
+        ->execute(['sort_order' => $order, 'id' => $productId]);
+}
+
+function render_product_sort_field(int $order): void
+{
+    ?>
+    <section class="form-section">
+        <div class="form-section-header">
+            <h2>Orden en el catálogo</h2>
+        </div>
+        <div class="form-group">
+            <label class="form-label" for="sort_order">Posición (opcional)</label>
+            <input class="form-input product-order-input" type="number" id="sort_order" name="sort_order"
+                min="0" step="1" value="<?= $order > 0 ? $order : '' ?>" placeholder="—">
+            <p class="form-hint">
+                1, 2, 3… salen primero en el catálogo. Vacío = sin orden: se muestra después, en orden aleatorio.
+            </p>
+        </div>
+    </section>
+    <?php
+}

@@ -3,6 +3,11 @@ declare(strict_types=1);
 require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/includes/functions.php';
 require_once __DIR__ . '/includes/wholesale-functions.php';
+require_once __DIR__ . '/includes/sales-functions.php';
+require_once __DIR__ . '/includes/promotion-functions.php';
+
+// Active promotions with an image (Administración > Promociones).
+$catalogPromotions = catalog_promotions($pdo);
 /*
 |--------------------------------------------------------------------------
 | Load Categories
@@ -27,6 +32,8 @@ $categories = $categoryStatement->fetchAll();
 | Load Active Products
 |--------------------------------------------------------------------------
 */
+// Products with an order (Administración > Productos, column Orden) go
+// first; the ones without order (0) follow in random order on every visit.
 $productStatement = $pdo->query(
   'SELECT
         p.id,
@@ -46,9 +53,9 @@ $productStatement = $pdo->query(
         p.is_active = 1
         AND c.is_active = 1
         AND c.is_coming_soon = 0     ORDER BY
+        p.sort_order = 0 ASC,
         p.sort_order ASC,
-        p.created_at DESC,
-        p.id DESC'
+        RAND()'
 );
 $products = $productStatement->fetchAll();
 $hasWholesaleProducts = count(array_filter(
@@ -376,7 +383,9 @@ $socialLinks = array_filter([
   <header class="site-header">
     <div class="container header-inner"> <a class="brand" href="#top" aria-label="<?= e(business_name()) ?> inicio"> <img
           class="brand-logo" src="<?= e(business_logo_url()) ?>" alt="<?= e(business_name()) ?>"> </a>
-      <nav class="main-nav" aria-label="Navegación principal"> <a href="#categories">
+      <nav class="main-nav" aria-label="Navegación principal"> <?php if ($catalogPromotions !== []): ?><a href="#promotions">
+          Promociones
+        </a> <?php endif; ?><a href="#categories">
           Categorías
         </a> <a href="#favorites">
           Favoritos
@@ -406,6 +415,41 @@ $socialLinks = array_filter([
         </div>
       </div>
     </section>
+    <?php if ($catalogPromotions !== []): ?>
+      <section class="section promotions-section" id="promotions">
+        <div class="container">
+          <div class="section-heading"> <span class="eyebrow">
+              PROMOCIONES
+            </span>
+            <h2>
+              Ofertas del momento
+            </h2>
+            <div class="decorative-line centered"></div>
+          </div>
+          <div class="promotion-grid">
+            <?php foreach ($catalogPromotions as $promotion): ?>
+              <article class="promotion-card">
+                <div class="promotion-card-media">
+                  <img class="promotion-card-image" src="<?= e(APP_BASE_URL . '/' . ltrim((string) $promotion['image_path'], '/')) ?>"
+                    alt="<?= e($promotion['name']) ?>" loading="lazy">
+                </div>
+                <div class="promotion-card-body">
+                  <span class="eyebrow">PROMOCIÓN</span>
+                  <h3><?= e($promotion['name']) ?></h3>
+                  <p><?= e(ucfirst(promotion_summary($promotion))) ?><?php if ($promotion['ends_on'] !== null): ?> · hasta el <?= e(date('d/m/Y', strtotime((string) $promotion['ends_on']))) ?><?php endif; ?></p>
+                  <?php if (whatsapp_digits() !== ''): ?>
+                    <a class="button button-dark" href="<?= e(whatsapp_link('Hola, me interesa la promoción "' . $promotion['name'] . '".')) ?>"
+                      target="_blank" rel="noopener noreferrer">
+                      Pedir por WhatsApp
+                    </a>
+                  <?php endif; ?>
+                </div>
+              </article>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </section>
+    <?php endif; ?>
     <section class="section" id="categories">
       <div class="container">
         <div class="section-heading">
