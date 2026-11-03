@@ -8,6 +8,8 @@ require_once __DIR__ . '/includes/promotion-functions.php';
 
 // Active promotions with an image (Administración > Promociones).
 $catalogPromotions = catalog_promotions($pdo);
+// Every current promotion, to tag the models it really applies to.
+$currentPromotions = current_promotions($pdo);
 /*
 |--------------------------------------------------------------------------
 | Load Categories
@@ -375,7 +377,7 @@ $socialLinks = array_filter([
   <link
     href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&display=swap"
     rel="stylesheet">
-  <link href="styles.css" rel="stylesheet">
+  <link href="styles.css?v=<?= (int) @filemtime(__DIR__ . '/styles.css') ?>" rel="stylesheet">
   <link href="<?= e(business_favicon_url()) ?>" rel="icon">
 </head>
 
@@ -731,6 +733,11 @@ $socialLinks = array_filter([
                 <?php if (wholesale_label($product) !== ''): ?>
                   <p class="product-wholesale-price"><?= e(wholesale_label($product)) ?></p>
                 <?php endif; ?>
+                <?php foreach ($currentPromotions as $promotion): ?>
+                  <?php if (promotion_applies_to($promotion, (int) $product['id'], (int) $product['category_id'])): ?>
+                    <p class="product-promo-tag" title="<?= e($promotion['name']) ?>">Promo <?= e(promotion_short_label($promotion)) ?></p>
+                  <?php endif; ?>
+                <?php endforeach; ?>
                 <div class="product-options">
                   <div class="product-option-row"> <span class="product-option-label">
                       Color

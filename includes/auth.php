@@ -91,6 +91,10 @@ function require_admin(): void
     }
 
     block_demo_changes();
+
+    // One-time change of the saved sizes 35-40 to 5-10.
+    require_once __DIR__ . '/size-functions.php';
+    convert_legacy_sizes($GLOBALS['pdo']);
 }
 
 

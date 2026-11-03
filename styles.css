@@ -1964,3 +1964,16 @@ body {
     border-radius: 20px 20px 0 0;
   }
 }
+
+/* Promotion tag on the models a promotion applies to. */
+.product-promo-tag {
+  display: inline-block;
+  margin: 6px 6px 0 0;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: #f3e6da;
+  color: #9c6844;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

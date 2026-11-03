@@ -4,23 +4,36 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/wholesale-functions.php';
+require_once __DIR__ . '/../../includes/sales-functions.php';
+require_once __DIR__ . '/../../includes/promotion-functions.php';
 
 require_admin();
 
 /*
 |--------------------------------------------------------------------------
-| Catálogo minorista
+| Catálogo (entrega inmediata)
 |--------------------------------------------------------------------------
 |
-| Printable retail catalog built from the products visible in the store.
-| The page title carries today's date, so "Guardar como PDF" names the
-| file "Catalogo Minorista dd-mm-aaaa.pdf".
+| Printable catalog built at the moment it opens, in the style of the
+| "Catalogo entrega inmediata" PDF: cover, Sobre nosotros, one arch
+| divider per category and 3x3 pages with "Tallas 6-7-9-10" + name.
+| Only sizes with stock are listed and models without stock are left
+| out (?todos=1 shows them as "Agotado"). Retail and wholesale prices
+| are both shown when they apply, and each model carries a tag for the
+| current promotions that really include it (promotion_applies_to()).
+| The title carries today's date, so "Guardar como PDF" names the file
+| "Catalogo Minorista dd-mm-aaaa.pdf". Cards link to WhatsApp in the PDF.
 |
 */
 
 const CATALOG_PER_PAGE = 9;
-define('CATALOG_WHATSAPP', setting('whatsapp_number'));
-define('CATALOG_INSTAGRAM', setting('instagram_user') !== '' ? '@' . social_handle('instagram_user') : '');
+
+$includeSoldOut = ($_GET['todos'] ?? '') === '1';
+$wholesaleReady = wholesale_columns_exist($pdo);
+// Current promotions: each card is tagged only with the ones that apply to it.
+$promotions = promotion_tables_exist($pdo) ? current_promotions($pdo) : [];
+$autoPrint = isset($_GET['print']);
 
 $months = [
     1 => 'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
@@ -28,7 +41,9 @@ $months = [
 ];
 $now = new DateTimeImmutable('now');
 $dateLong = $now->format('j') . ' de ' . $months[(int) $now->format('n')] . ' de ' . $now->format('Y');
-$fileTitle = 'Catalogo Minorista ' . $now->format('d-m-Y');
+$fileTitle = 'Catalogo ' . $now->format('d-m-Y');
+$businessName = business_name();
+$hasWhatsapp = whatsapp_digits() !== '';
 
 $categories = $pdo->query(
     'SELECT id, name, image
@@ -38,23 +53,25 @@ $categories = $pdo->query(
      ORDER BY sort_order ASC, name ASC'
 )->fetchAll();
 
+// Same order as the online catalog: manual order first, then the newest.
 $products = $pdo->query(
-    'SELECT p.id, p.category_id, p.code, p.name, p.price, p.main_image, p.is_featured
+    'SELECT p.*
      FROM products p
      INNER JOIN categories c ON c.id = p.category_id
      WHERE p.is_active = 1
         AND c.is_active = 1
         AND c.is_coming_soon = 0
-     ORDER BY p.sort_order ASC, p.created_at DESC, p.id DESC'
+     ORDER BY (p.sort_order > 0) DESC, p.sort_order ASC, p.created_at DESC, p.id DESC'
 )->fetchAll();
 
+// Stock per size, all colors together.
 $sizesByProduct = [];
 
 if ($products !== []) {
     $ids = array_map(static fn (array $product): int => (int) $product['id'], $products);
     $placeholders = implode(',', array_fill(0, count($ids), '?'));
     $sizeStatement = $pdo->prepare(
-        "SELECT product_id, size
+        "SELECT product_id, size, stock
          FROM product_variants
          WHERE product_id IN ($placeholders)"
     );
@@ -64,7 +81,8 @@ if ($products !== []) {
         $size = trim((string) $row['size']);
 
         if ($size !== '') {
-            $sizesByProduct[(int) $row['product_id']][$size] = true;
+            $productId = (int) $row['product_id'];
+            $sizesByProduct[$productId][$size] = ($sizesByProduct[$productId][$size] ?? 0) + (int) $row['stock'];
         }
     }
 }
@@ -92,7 +110,7 @@ function catalog_image_url(?string $path): string
         return $path;
     }
 
-    return APP_BASE_URL . '/' . ltrim($path, '/');
+    return APP_BASE_URL . '/' . ltrim($path, '/') . '?v=' . (int) @filemtime(__DIR__ . '/../../' . ltrim($path, '/'));
 }
 
 function catalog_price(mixed $price): string
@@ -107,46 +125,138 @@ function catalog_price(mixed $price): string
     return currency_symbol() . number_format($value, $decimals);
 }
 
-function catalog_sizes(array $sizes): string
+/**
+ * The system saves sizes as 35-40; the store sells them as 5-10.
+ * 35 → 5, 36 → 6 … 40 → 10 (whole and half sizes from 34 to 44).
+ */
+function catalog_display_size(mixed $size): string
 {
-    $sizes = array_keys($sizes);
+    $size = trim((string) $size);
 
-    if ($sizes === []) {
+    if (is_numeric($size) && (float) $size >= 34 && (float) $size <= 44) {
+        $converted = (float) $size - 30;
+
+        return abs($converted - round($converted)) < 0.001 ? (string) (int) round($converted) : rtrim(rtrim(number_format($converted, 1, '.', ''), '0'), '.');
+    }
+
+    return $size;
+}
+
+/**
+ * Sizes with stock, in shoe order: "Tallas 6-7-9-10" / "Talla 8".
+ */
+function catalog_sizes_label(array $sizes): string
+{
+    $available = array_values(array_unique(array_map(
+        'catalog_display_size',
+        array_keys(array_filter($sizes, static fn (int $stock): bool => $stock > 0))
+    )));
+
+    if ($available === []) {
         return '';
     }
 
-    $numeric = array_filter($sizes, static fn (string $size): bool => is_numeric($size));
+    usort($available, static function (string $a, string $b): int {
+        if (is_numeric($a) && is_numeric($b)) {
+            return (float) $a <=> (float) $b;
+        }
 
-    if (count($numeric) === count($sizes)) {
-        sort($numeric, SORT_NUMERIC);
-        $first = reset($numeric);
-        $last = end($numeric);
+        if (is_numeric($a) !== is_numeric($b)) {
+            return is_numeric($a) ? -1 : 1;
+        }
 
-        return $first === $last ? 'Talla ' . $first : 'Tallas ' . $first . ' a ' . $last;
+        return strnatcasecmp($a, $b);
+    });
+
+    return (count($available) === 1 ? 'Talla ' : 'Tallas ') . implode('-', $available);
+}
+
+/**
+ * Wholesale offer of a model as "C$280|6", or null.
+ */
+function catalog_wholesale_offer(array $item, bool $wholesaleReady): ?string
+{
+    if (!$wholesaleReady || (int) ($item['is_wholesale'] ?? 0) !== 1 || $item['wholesale_price'] === null) {
+        return null;
     }
 
-    natsort($sizes);
+    return catalog_price($item['wholesale_price']) . '|' . max(1, (int) $item['wholesale_min_qty']);
+}
 
-    return 'Tallas ' . implode(', ', $sizes);
+/**
+ * The page header shows the retail price and, when it applies, the
+ * wholesale price: "Precio C$450 el par · Mayorista C$280 desde 6 pares".
+ * When a price differs between the models of a category, each card shows
+ * its own price instead.
+ */
+function catalog_header(array $items, bool $wholesaleReady): array
+{
+    $retail = array_values(array_unique(array_map(static fn (array $item): string => catalog_price($item['price']), $items)));
+    $retailSame = count($retail) === 1 && $retail[0] !== 'Consultar';
+    $html = $retailSame ? 'Precio <b>' . e($retail[0]) . '</b> el par' : 'Precio <b>por modelo</b>';
+
+    $offers = array_map(static fn (array $item): ?string => catalog_wholesale_offer($item, $wholesaleReady), $items);
+    $withOffer = array_values(array_unique(array_filter($offers)));
+    $wholesaleSame = count($withOffer) === 1 && !in_array(null, $offers, true);
+
+    if ($wholesaleSame) {
+        [$price, $minimum] = explode('|', $withOffer[0]);
+        $html .= ' · Mayorista <b>' . e($price) . '</b> desde <b>' . (int) $minimum . ' pares</b>';
+    }
+
+    return [
+        'html' => $html,
+        'retail_per_card' => !$retailSame,
+        'wholesale_per_card' => !$wholesaleSame && $withOffer !== [],
+    ];
+}
+
+/**
+ * Price lines under a model's name, only for what the header does not say.
+ */
+function catalog_card_prices(array $item, array $header, bool $wholesaleReady): array
+{
+    $lines = [];
+
+    if ($header['retail_per_card']) {
+        $lines[] = catalog_price($item['price']) . ' el par';
+    }
+
+    $offer = $header['wholesale_per_card'] ? catalog_wholesale_offer($item, $wholesaleReady) : null;
+
+    if ($offer !== null) {
+        [$price, $minimum] = explode('|', $offer);
+        $lines[] = 'Mayorista ' . $price . ' desde ' . $minimum . ' pares';
+    }
+
+    return $lines;
 }
 
 // Group products by category and split each category into pages of nine.
 $sections = [];
+$hiddenSoldOut = 0;
 
 foreach ($categories as $category) {
-    $items = array_values(array_filter(
-        $products,
-        static fn (array $product): bool => (int) $product['category_id'] === (int) $category['id']
-    ));
+    $items = [];
+
+    foreach ($products as $product) {
+        if ((int) $product['category_id'] !== (int) $category['id']) {
+            continue;
+        }
+
+        $product['sizes_label'] = catalog_sizes_label($sizesByProduct[(int) $product['id']] ?? []);
+
+        if ($product['sizes_label'] === '' && !$includeSoldOut) {
+            $hiddenSoldOut++;
+            continue;
+        }
+
+        $items[] = $product;
+    }
 
     if ($items === []) {
         continue;
     }
-
-    $prices = array_filter(array_map(
-        static fn (array $product) => $product['price'] === null ? null : (float) $product['price'],
-        $items
-    ), static fn ($price): bool => $price !== null);
 
     $cover = trim((string) ($category['image'] ?? ''));
 
@@ -164,32 +274,37 @@ foreach ($categories as $category) {
     $sections[] = [
         'name' => (string) $category['name'],
         'cover' => $cover,
-        'from' => $prices === [] ? null : min($prices),
+        'header' => catalog_header($items, $wholesaleReady),
         'pages' => array_chunk($items, CATALOG_PER_PAGE),
     ];
 }
 
-$coverImage = '';
+$modelCount = array_sum(array_map(
+    static fn (array $section): int => array_sum(array_map('count', $section['pages'])),
+    $sections
+));
 
-foreach ([true, false] as $featuredOnly) {
-    foreach ($products as $product) {
-        if (catalog_image_exists($product['main_image']) && (!$featuredOnly || (int) $product['is_featured'] === 1)) {
-            $coverImage = (string) $product['main_image'];
-            break 2;
-        }
-    }
-}
+// Fixed artwork; replace these images to change them.
+$fixedCover = 'assets/catalog-cover.webp';
+$fixedAbout = 'assets/catalog/sobre-nosotros.jpg';
+$paper = 'assets/catalog/papel.jpg';
+$hasFixedCover = catalog_image_exists($fixedCover);
+$hasFixedAbout = catalog_image_exists($fixedAbout);
+$hasPaper = catalog_image_exists($paper);
 
-$logo = business_logo_url();
 $aboutParagraphs = array_values(array_filter(
     array_map('trim', preg_split('/\R{2,}/', setting('about_text')) ?: []),
     static fn (string $paragraph): bool => $paragraph !== ''
 ));
 
-// Same cover as the wholesale catalog; replace this image to change it.
-$fixedCover = 'assets/catalog-cover.webp';
-$hasFixedCover = catalog_image_exists($fixedCover);
-$autoPrint = isset($_GET['print']);
+function catalog_link(array $query): string
+{
+    $query = array_filter($query, static fn ($value): bool => $value !== null && $value !== '');
+
+    return APP_BASE_URL . '/admin/products/catalog.php' . ($query === [] ? '' : '?' . http_build_query($query));
+}
+
+$currentQuery = ['todos' => $includeSoldOut ? '1' : null];
 
 ?>
 <!DOCTYPE html>
@@ -203,20 +318,19 @@ $autoPrint = isset($_GET['print']);
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link
-        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:ital,wght@0,400;0,500;0,600;0,800;1,400&family=Pinyon+Script&display=swap"
+        href="https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400;0,600;0,700;1,400;1,500;1,600;1,700&family=Pinyon+Script&family=Cormorant+Garamond:wght@600&display=swap"
         rel="stylesheet">
     <style>
         @page {
-            size: 8in 10in;
+            size: 612pt 792pt;
             margin: 0;
         }
 
         :root {
-            --paper: #e7dfcd;
-            --paper-dark: #ddd2bb;
-            --brown: #3b2219;
-            --brown-soft: #8b5a45;
-            --line: #9a6a54;
+            --brown: #4a2a1d;
+            --soft: #9a7462;
+            --line: #a97b63;
+            --script: #8b5a45;
         }
 
         * {
@@ -231,9 +345,14 @@ $autoPrint = isset($_GET['print']);
         body {
             background: #8f8478;
             color: var(--brown);
-            font-family: "Inter", Arial, sans-serif;
+            font-family: "Instrument Sans", Arial, sans-serif;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
         }
 
         .catalog-toolbar {
@@ -248,7 +367,20 @@ $autoPrint = isset($_GET['print']);
             padding: 14px 20px;
             background: #1d1a18;
             color: #fff;
-            font-size: 0.85rem;
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+        }
+
+        .catalog-toolbar small {
+            display: block;
+            margin-top: 3px;
+            color: #cfc6bd;
+        }
+
+        .catalog-toolbar-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
         }
 
         .catalog-toolbar a,
@@ -258,9 +390,8 @@ $autoPrint = isset($_GET['print']);
             background: transparent;
             color: #fff;
             font: inherit;
-            font-size: 0.75rem;
-            letter-spacing: 0.08em;
-            text-decoration: none;
+            font-size: 12px;
+            letter-spacing: 0.06em;
             text-transform: uppercase;
             cursor: pointer;
         }
@@ -268,17 +399,7 @@ $autoPrint = isset($_GET['print']);
         .catalog-toolbar button {
             background: #fff;
             color: #1d1a18;
-        }
-
-        .catalog-toolbar-actions {
-            display: flex;
-            gap: 10px;
-        }
-
-        .catalog-toolbar small {
-            display: block;
-            margin-top: 3px;
-            color: #cfc6bd;
+            font-weight: 700;
         }
 
         .catalog-pages {
@@ -290,209 +411,67 @@ $autoPrint = isset($_GET['print']);
 
         .page {
             position: relative;
-            width: 8in;
-            height: 10in;
+            width: 612pt;
+            height: 792pt;
             overflow: hidden;
-            background:
-                radial-gradient(ellipse at 12% 8%, rgba(255, 255, 255, 0.55), transparent 42%),
-                radial-gradient(ellipse at 92% 88%, rgba(255, 255, 255, 0.4), transparent 38%),
-                radial-gradient(ellipse at 85% 15%, rgba(176, 150, 120, 0.18), transparent 35%),
-                var(--paper);
+            background: <?= $hasPaper ? 'url(' . e(catalog_image_url($paper)) . ') center / cover no-repeat,' : '' ?> #ebe4d8;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
             page-break-after: always;
             break-after: page;
         }
 
+        .page-image img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
         .script {
-            font-family: "Pinyon Script", "Cormorant Garamond", serif;
+            font-family: "Pinyon Script", serif;
             font-weight: 400;
         }
 
-        /* ---------- Cover ---------- */
-
-        .cover-frame {
-            position: absolute;
-            inset: 0.85in 0.55in 0.55in;
-            overflow: hidden;
-            background: #c9b49a;
-        }
-
-        .cover-frame img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .cover-frame::after {
-            content: "";
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(180deg, rgba(40, 22, 14, 0.15) 0%, rgba(40, 22, 14, 0) 40%, rgba(40, 22, 14, 0.45) 100%);
-        }
-
-        .cover-logo {
-            position: absolute;
-            top: 1.35in;
-            left: 0;
-            right: 0;
-            z-index: 2;
-            text-align: center;
-        }
-
-        .cover-logo img {
-            width: 3.1in;
-            filter: brightness(0) invert(1) drop-shadow(0 2px 8px rgba(0, 0, 0, 0.25));
-        }
-
-        .cover-logo-dark img {
-            filter: none;
-        }
-
-        .cover-seal {
-            position: absolute;
-            top: 0.35in;
-            right: 0.3in;
-            z-index: 3;
-            display: grid;
-            place-items: center;
-            width: 1.5in;
-            height: 1.5in;
-            border-radius: 50%;
-            background: #efeae2;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
-            color: var(--brown);
-            text-align: center;
-            font-size: 0.11in;
-            font-weight: 600;
-            letter-spacing: 0.14em;
-            line-height: 1.5;
-            text-transform: uppercase;
-        }
-
-        .cover-seal strong {
-            display: block;
-            font-family: "Cormorant Garamond", serif;
-            font-size: 0.22in;
-            letter-spacing: 0.06em;
-        }
-
-        .cover-title {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0.95in;
-            z-index: 2;
-            color: #fff;
-            text-align: center;
-        }
-
-        .cover-title .script {
-            display: block;
-            font-size: 1.15in;
-            line-height: 0.9;
-            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
-        }
-
-        .cover-title .cover-kind {
-            display: block;
-            margin-top: 0.08in;
-            font-size: 0.42in;
-            font-weight: 600;
-            letter-spacing: 0.04em;
-        }
-
-        .cover-title .cover-date {
-            display: inline-block;
-            margin-top: 0.14in;
-            padding: 0.06in 0.2in;
-            border: 1px solid rgba(255, 255, 255, 0.75);
-            font-size: 0.14in;
-            letter-spacing: 0.16em;
-            text-transform: uppercase;
-        }
-
-        .cover-plain .cover-frame {
-            background: var(--paper-dark);
-        }
-
-        .cover-plain .cover-frame::after {
-            content: none;
-        }
-
-        .cover-plain .cover-title {
-            color: var(--brown);
-        }
-
-        .cover-plain .cover-title .cover-date {
-            border-color: var(--brown);
-        }
-
-        .cover-exact img {
-            display: block;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        /* ---------- About ---------- */
-
+        /* About (text version when there is no fixed image) */
         .about {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            padding: 0.9in 0.85in;
+            padding: 70pt 80pt;
             text-align: center;
         }
 
-        .page-heading {
-            margin: 0 0 0.45in;
-            font-size: 0.62in;
+        .about h2 {
+            margin: 0 0 22pt;
+            font-family: "Cormorant Garamond", serif;
+            font-size: 34pt;
             font-weight: 600;
-            line-height: 1;
         }
 
-        .page-heading .script {
-            margin-right: 0.08in;
-            font-size: 0.85in;
+        .about h2 .script {
+            margin-right: 4pt;
+            font-size: 46pt;
         }
 
         .about p {
-            margin: 0 0 0.18in;
-            color: var(--brown-soft);
-            font-size: 0.2in;
+            margin: 0 0 10pt;
+            color: var(--soft);
+            font-size: 11pt;
             font-style: italic;
             line-height: 1.55;
         }
 
-        .about p strong {
-            font-style: italic;
-        }
-
-        .about-list {
-            display: grid;
-            gap: 0.14in;
-            margin: 0.35in 0 0;
-            padding: 0;
-            list-style: none;
-            color: var(--brown-soft);
-            font-size: 0.19in;
-            font-style: italic;
-        }
-
-        .about-list b {
-            color: var(--brown);
-            font-style: normal;
-        }
-
-        /* ---------- Category divider ---------- */
-
+        /* Category divider */
         .divider-arch {
             position: absolute;
-            inset: 0.4in 0.35in 1.1in;
+            top: 33pt;
+            left: 10pt;
+            right: 10pt;
+            bottom: 64pt;
             overflow: hidden;
-            border-radius: 3.65in 3.65in 0 0;
-            background: #cdb79c;
+            border-radius: 296pt 296pt 0 0;
+            background: #d8c6ae;
         }
 
         .divider-arch img {
@@ -503,179 +482,142 @@ $autoPrint = isset($_GET['print']);
 
         .divider-line {
             position: absolute;
-            inset: 0.62in 0.57in 1.32in;
-            z-index: 2;
-            border: 1.5px solid rgba(110, 66, 48, 0.85);
-            border-radius: 3.43in 3.43in 0 0;
-            pointer-events: none;
+            top: 55pt;
+            left: 30pt;
+            right: 30pt;
+            bottom: 84pt;
+            border: 1pt solid var(--line);
+            border-radius: 276pt 276pt 0 0;
         }
 
-        /* Brown tab in the photo's bottom-left corner, like the price tags of the wholesale catalog. */
         .divider-name {
             position: absolute;
-            left: 0.35in;
-            bottom: 1.1in;
-            z-index: 3;
-            max-width: 6.2in;
-            padding: 0.16in 0.5in 0.14in 0.32in;
-            border-radius: 0 0.5in 0 0;
-            background: rgba(110, 63, 44, 0.9);
-            color: #fff;
-            font-family: "Inter", Arial, sans-serif;
-            font-size: 0.55in;
-            font-weight: 800;
-            line-height: 1.05;
-            letter-spacing: -0.01em;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
+            right: 70pt;
+            bottom: 112pt;
+            color: var(--script);
+            font-size: 58pt;
+            line-height: 1;
+            text-shadow: 0 0 18pt rgba(255, 245, 235, 0.55);
         }
 
         .divider-note {
             position: absolute;
             left: 0;
             right: 0;
-            bottom: 0.48in;
-            color: var(--brown-soft);
-            text-align: center;
-            font-size: 0.21in;
+            bottom: 22pt;
+            color: var(--soft);
+            font-size: 13pt;
             font-style: italic;
+            text-align: center;
         }
 
-        .divider-note strong {
+        .divider-note b {
             color: var(--brown);
+        }
+
+        /* Product pages */
+        .grid-header {
+            position: absolute;
+            top: 30pt;
+            left: 30pt;
+            right: 30pt;
+            color: var(--brown);
+            font-size: 16pt;
             font-style: italic;
-        }
-
-        /* ---------- Product grid ---------- */
-
-        .grid-page {
-            padding: 0.55in 0.55in 0.4in;
-        }
-
-        .grid-title {
-            margin: 0 0 0.12in;
-            color: #6e3f2c;
             text-align: center;
-            font-size: 0.5in;
-            line-height: 1;
+        }
+
+        .grid-header b {
+            font-weight: 700;
         }
 
         .product-grid {
+            position: absolute;
+            top: 72pt;
+            left: 47pt;
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 0.2in 0.28in;
+            grid-template-columns: repeat(3, 151pt);
+            grid-auto-rows: 236pt;
+            column-gap: 32pt;
         }
 
         .product-card {
+            display: block;
             text-align: center;
         }
 
         .product-arch {
-            position: relative;
-            height: 2in;
-            padding: 0.06in;
-            border: 1.5px solid var(--line);
-            border-radius: 1.1in 1.1in 0 0;
-            background: rgba(255, 255, 255, 0.25);
+            width: 151pt;
+            height: 180pt;
+            padding: 4pt;
+            border: 1pt solid var(--line);
+            border-radius: 76pt 76pt 0 0;
         }
 
-        .product-arch-inner {
-            position: relative;
+        .product-arch img,
+        .product-arch-empty {
+            display: block;
             width: 100%;
             height: 100%;
-            overflow: hidden;
-            border-radius: 1.04in 1.04in 0 0;
-            background: #d8c6ae;
-        }
-
-        .product-arch-inner img {
-            width: 100%;
-            height: 100%;
+            border-radius: 72pt 72pt 0 0;
             object-fit: cover;
         }
 
         .product-arch-empty {
             display: grid;
             place-items: center;
-            height: 100%;
+            background: #d8c6ae;
             color: #8d7563;
-            font-family: "Cormorant Garamond", serif;
-            font-size: 0.22in;
+            font-size: 12pt;
         }
 
-        .product-price {
-            position: absolute;
-            left: 0;
-            bottom: 0;
-            padding: 0.05in 0.2in 0.04in 0.1in;
-            border-radius: 0 0.3in 0 0;
-            background: rgba(123, 74, 54, 0.88);
-            color: #fff;
-            font-size: 0.24in;
-            font-weight: 600;
-            letter-spacing: 0.01em;
-        }
-
-        .product-name {
-            margin: 0.08in 0 0;
-            font-family: "Cormorant Garamond", serif;
-            font-size: 0.2in;
-            font-weight: 600;
+        .product-sizes {
+            margin-top: 6pt;
+            color: var(--soft);
+            font-size: 12.5pt;
+            font-style: italic;
             line-height: 1.1;
         }
 
-        .product-meta {
-            margin: 0.02in 0 0;
-            color: var(--brown-soft);
-            font-size: 0.11in;
-            letter-spacing: 0.04em;
+        .product-name {
+            color: var(--brown);
+            font-size: 12.5pt;
+            font-style: italic;
+            font-weight: 700;
+            line-height: 1.15;
         }
 
-        .grid-note {
-            position: absolute;
-            left: 0;
-            right: 0;
-            bottom: 0.32in;
-            color: var(--brown-soft);
-            text-align: center;
-            font-size: 0.16in;
+        .product-price {
+            margin-top: 1pt;
+            color: var(--soft);
+            font-size: 9pt;
             font-style: italic;
         }
 
-        /* ---------- Contact ---------- */
-
-        .contact {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 1in;
-            text-align: center;
+        /* Pages whose cards carry extra price lines get shorter arches. */
+        .compact .product-arch {
+            height: 162pt;
         }
 
-        .contact img {
-            width: 2.6in;
-            margin-bottom: 0.5in;
+        .compact .product-price {
+            font-size: 8.5pt;
+            line-height: 1.15;
         }
 
-        .contact-items {
-            display: grid;
-            gap: 0.3in;
-        }
-
-        .contact-items span {
-            display: block;
-            margin-bottom: 0.05in;
-            color: var(--brown-soft);
-            font-size: 0.13in;
-            letter-spacing: 0.18em;
-            text-transform: uppercase;
-        }
-
-        .contact-items strong {
-            font-family: "Cormorant Garamond", serif;
-            font-size: 0.36in;
+        .product-promo {
+            display: inline-block;
+            margin-top: 2pt;
+            padding: 0.5pt 6pt;
+            border-radius: 8pt;
+            background: rgba(156, 104, 68, 0.16);
+            color: var(--script);
+            font-size: 7.5pt;
             font-weight: 600;
+        }
+
+        .sold-out .product-arch img {
+            filter: grayscale(0.7);
+            opacity: 0.6;
         }
 
         .empty-state {
@@ -732,7 +674,7 @@ $autoPrint = isset($_GET['print']);
 
         @media screen and (max-width: 560px) {
             .page {
-                zoom: 0.46;
+                zoom: 0.44;
             }
         }
     </style>
@@ -741,60 +683,49 @@ $autoPrint = isset($_GET['print']);
 <body>
     <div class="catalog-toolbar">
         <div>
-            <strong>Catálogo minorista · <?= e($dateLong) ?></strong>
-            <small>En Destino elige "Guardar como PDF" (no "Microsoft Print to PDF") para que el archivo se llame "<?= e($fileTitle) ?>.pdf".</small>
+            <strong>Catálogo · <?= e($dateLong) ?> · <?= (int) $modelCount ?> modelos</strong>
+            <small>
+                Tallas con stock de este momento.
+                <?php if ($hiddenSoldOut > 0): ?>
+                    <?= (int) $hiddenSoldOut ?> modelo<?= $hiddenSoldOut === 1 ? '' : 's' ?> sin stock no aparece<?= $hiddenSoldOut === 1 ? '' : 'n' ?>.
+                <?php endif; ?>
+                En Destino elige "Guardar como PDF".
+            </small>
         </div>
         <div class="catalog-toolbar-actions">
             <a href="<?= e(APP_BASE_URL) ?>/admin/products/">← Productos</a>
-            <button type="button" onclick="window.print()">Guardar PDF / Imprimir</button>
+            <a href="<?= e(catalog_link(['todos' => $includeSoldOut ? null : '1'] + $currentQuery)) ?>">
+                <?= $includeSoldOut ? 'Solo con stock' : 'Incluir agotados' ?>
+            </a>
+            <button type="button" onclick="window.print()">Descargar PDF</button>
         </div>
     </div>
 
     <?php if ($sections === []): ?>
         <div class="empty-state">
-            No hay productos activos en categorías visibles. Activa productos para armar el catálogo.
+            No hay productos activos con stock en categorías visibles.
         </div>
     <?php else: ?>
         <div class="catalog-pages">
 
             <?php if ($hasFixedCover): ?>
-            <section class="page cover-exact">
-                <img src="<?= e(catalog_image_url($fixedCover)) ?>?v=<?= (int) @filemtime(__DIR__ . '/../../' . $fixedCover) ?>" alt="Catálogo <?= e(business_name()) ?>">
-            </section>
-            <?php else: ?>
-            <section class="page <?= $coverImage === '' ? 'cover-plain' : '' ?>">
-                <div class="cover-frame">
-                    <?php if ($coverImage !== ''): ?>
-                        <img src="<?= e(catalog_image_url($coverImage)) ?>" alt="">
-                    <?php endif; ?>
-                </div>
-                <div class="cover-seal">
-                    <div><strong><?= e(business_name()) ?></strong><?= e(setting('business_tagline')) ?></div>
-                </div>
-                <div class="cover-logo <?= $coverImage === '' ? 'cover-logo-dark' : '' ?>">
-                    <img src="<?= e($logo) ?>" alt="<?= e(business_name()) ?>">
-                </div>
-                <div class="cover-title">
-                    <span class="script">Catálogo</span>
-                    <span class="cover-kind">Minorista</span>
-                    <span class="cover-date"><?= e($dateLong) ?></span>
-                </div>
-            </section>
+                <section class="page page-image">
+                    <img src="<?= e(catalog_image_url($fixedCover)) ?>" alt="Catálogo <?= e($businessName) ?>">
+                </section>
             <?php endif; ?>
 
-            <section class="page about">
-                <h2 class="page-heading"><span class="script">Sobre</span>Nosotros</h2>
-                <?php foreach ($aboutParagraphs as $paragraph): ?>
-                    <p><?= nl2br(e($paragraph)) ?></p>
-                <?php endforeach; ?>
-                <ul class="about-list">
-                    <?php if (CATALOG_WHATSAPP !== ''): ?>
-                        <li><b>Pedidos:</b> por WhatsApp al <?= e(CATALOG_WHATSAPP) ?></li>
-                    <?php endif; ?>
-                    <li><b>Precios:</b> por par, vigentes al <?= e($dateLong) ?></li>
-                    <li><b>Envíos</b> a toda Nicaragua</li>
-                </ul>
-            </section>
+            <?php if ($hasFixedAbout): ?>
+                <section class="page page-image">
+                    <img src="<?= e(catalog_image_url($fixedAbout)) ?>" alt="Sobre nosotros">
+                </section>
+            <?php elseif ($aboutParagraphs !== []): ?>
+                <section class="page about">
+                    <h2><span class="script">Sobre</span>Nosotros</h2>
+                    <?php foreach ($aboutParagraphs as $paragraph): ?>
+                        <p><?= nl2br(e($paragraph)) ?></p>
+                    <?php endforeach; ?>
+                </section>
+            <?php endif; ?>
 
             <?php foreach ($sections as $section): ?>
                 <section class="page">
@@ -804,58 +735,49 @@ $autoPrint = isset($_GET['print']);
                         <?php endif; ?>
                     </div>
                     <div class="divider-line"></div>
-                    <div class="divider-name"><?= e($section['name']) ?></div>
-                    <?php if ($section['from'] !== null): ?>
-                        <div class="divider-note">Desde <strong><?= e(catalog_price($section['from'])) ?></strong> el par</div>
-                    <?php endif; ?>
+                    <div class="divider-name script"<?= mb_strlen($section['name']) > 8 ? ' style="font-size: ' . max(34, 58 - 3 * (mb_strlen($section['name']) - 8)) . 'pt"' : '' ?>><?= e($section['name']) ?></div>
+                    <div class="divider-note">Estilos disponibles para <b>entrega inmediata</b></div>
                 </section>
 
                 <?php foreach ($section['pages'] as $pageItems): ?>
-                    <section class="page grid-page">
-                        <h2 class="grid-title script"><?= e($section['name']) ?></h2>
+                    <?php
+                    $compact = $section['header']['retail_per_card'] || $section['header']['wholesale_per_card'];
+                    ?>
+                    <section class="page<?= $compact ? ' compact' : '' ?>">
+                        <div class="grid-header"><?= $section['header']['html'] ?></div>
                         <div class="product-grid">
                             <?php foreach ($pageItems as $product): ?>
-                                <?php $sizes = catalog_sizes($sizesByProduct[(int) $product['id']] ?? []); ?>
-                                <article class="product-card">
+                                <?php
+                                $code = trim((string) $product['code']);
+                                $soldOut = $product['sizes_label'] === '';
+                                $tag = $hasWhatsapp && !$soldOut ? 'a' : 'div';
+                                $message = 'Hola ' . $businessName . ', quiero pedir el modelo ' . $product['name']
+                                    . ($code !== '' ? ' (' . $code . ')' : '') . '. Mi talla es: ';
+                                ?>
+                                <<?= $tag ?> class="product-card<?= $soldOut ? ' sold-out' : '' ?>"<?php if ($tag === 'a'): ?> href="<?= e(whatsapp_link($message)) ?>" target="_blank" rel="noopener"<?php endif; ?>>
                                     <div class="product-arch">
-                                        <div class="product-arch-inner">
-                                            <?php if (catalog_image_exists($product['main_image'])): ?>
-                                                <img src="<?= e(catalog_image_url((string) $product['main_image'])) ?>" alt="<?= e($product['name']) ?>">
-                                            <?php else: ?>
-                                                <div class="product-arch-empty"><?= e(business_name()) ?></div>
-                                            <?php endif; ?>
-                                            <div class="product-price"><?= e(catalog_price($product['price'])) ?></div>
-                                        </div>
+                                        <?php if (catalog_image_exists($product['main_image'])): ?>
+                                            <img src="<?= e(catalog_image_url((string) $product['main_image'])) ?>" alt="<?= e($product['name']) ?>">
+                                        <?php else: ?>
+                                            <div class="product-arch-empty"><?= e($businessName) ?></div>
+                                        <?php endif; ?>
                                     </div>
-                                    <p class="product-name"><?= e($product['name']) ?></p>
-                                    <p class="product-meta">
-                                        <?= e(trim((string) $product['code'])) ?><?= $sizes !== '' ? ' · ' . e($sizes) : '' ?>
-                                    </p>
-                                </article>
+                                    <div class="product-sizes"><?= $soldOut ? 'Agotado' : e($product['sizes_label']) ?></div>
+                                    <div class="product-name"><?= e($product['name']) ?></div>
+                                    <?php foreach (catalog_card_prices($product, $section['header'], $wholesaleReady) as $priceLine): ?>
+                                        <div class="product-price"><?= e($priceLine) ?></div>
+                                    <?php endforeach; ?>
+                                    <?php foreach ($promotions as $promotion): ?>
+                                        <?php if (!$soldOut && promotion_applies_to($promotion, (int) $product['id'], (int) $product['category_id'])): ?>
+                                            <div class="product-promo">Promo <?= e(promotion_short_label($promotion)) ?></div>
+                                        <?php endif; ?>
+                                    <?php endforeach; ?>
+                                </<?= $tag ?>>
                             <?php endforeach; ?>
                         </div>
-                        <p class="grid-note">Consulta colores y tallas disponibles<?= CATALOG_WHATSAPP !== '' ? ' por WhatsApp ' . e(CATALOG_WHATSAPP) : '' ?></p>
                     </section>
                 <?php endforeach; ?>
             <?php endforeach; ?>
-
-            <section class="page contact">
-                <img src="<?= e($logo) ?>" alt="<?= e(business_name()) ?>">
-                <div class="contact-items">
-                    <?php if (CATALOG_WHATSAPP !== ''): ?>
-                        <div><span>WhatsApp</span><strong><?= e(CATALOG_WHATSAPP) ?></strong></div>
-                    <?php endif; ?>
-                    <?php if (CATALOG_INSTAGRAM !== ''): ?>
-                        <div><span>Instagram</span><strong><?= e(CATALOG_INSTAGRAM) ?></strong></div>
-                    <?php endif; ?>
-                    <?php if (social_handle('tiktok_user') !== ''): ?>
-                        <div><span>TikTok</span><strong>@<?= e(social_handle('tiktok_user')) ?></strong></div>
-                    <?php endif; ?>
-                    <?php if (setting('facebook_url') !== ''): ?>
-                        <div><span>Facebook</span><strong><?= e(preg_replace('#^https?://(www\.)?facebook\.com/#i', '', setting('facebook_url'))) ?></strong></div>
-                    <?php endif; ?>
-                </div>
-            </section>
 
         </div>
     <?php endif; ?>
@@ -863,7 +785,9 @@ $autoPrint = isset($_GET['print']);
     <?php if ($autoPrint && $sections !== []): ?>
         <script>
             window.addEventListener('load', function () {
-                window.print();
+                (document.fonts ? document.fonts.ready : Promise.resolve()).then(function () {
+                    window.print();
+                });
             });
         </script>
     <?php endif; ?>

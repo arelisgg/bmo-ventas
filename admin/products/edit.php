@@ -2,6 +2,7 @@
 declare(strict_types=1);
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/size-functions.php';
 require_once __DIR__ . '/../../includes/product-functions.php';
 require_once __DIR__ . '/../../includes/wholesale-functions.php';
 require_once __DIR__ . '/../../includes/finance-functions.php';
@@ -11,14 +12,7 @@ require_admin();
 | Available Sizes
 |--------------------------------------------------------------------------
 */
-$availableSizes = [
-    '35',
-    '36',
-    '37',
-    '38',
-    '39',
-    '40',
-];
+$availableSizes = store_sizes();
 /*
 |--------------------------------------------------------------------------
 | Product ID
@@ -171,14 +165,7 @@ if (
         [
             'name' => '',
             'hex' => '#d8c6b5',
-            'stock' => [
-                '35' => '0',
-                '36' => '0',
-                '37' => '0',
-                '38' => '0',
-                '39' => '0',
-                '40' => '0',
-            ],
+            'stock' => array_fill_keys(store_sizes(), '0'),
         ],
     ];
 }

@@ -16,6 +16,8 @@ declare(strict_types=1);
 | - The sale form only applies a promotion after the user accepts it.
 | - One promotion per sale, and never together with wholesale prices:
 |   the form offers whichever saves more and the user confirms.
+| - Scope: the models chosen one by one (promotion_products) or, when
+|   none are chosen, the chosen categories (none = every product).
 | - 'bundle': every N units of the chosen categories cost a fixed
 |   price. The most expensive units go into the bundles.
 | - 'percent': % off the units of the chosen categories.
@@ -80,11 +82,87 @@ function load_promotions(PDO $pdo, bool $activeOnly = false): array
         $categories[(int) $row['promotion_id']][(int) $row['category_id']] = (string) $row['name'];
     }
 
+    $products = [];
+
+    if (promotion_products_ready($pdo)) {
+        foreach ($pdo->query(
+            'SELECT pp.promotion_id, p.id, p.code, p.name, p.category_id
+             FROM promotion_products pp
+             INNER JOIN products p ON p.id = pp.product_id
+             ORDER BY p.name ASC'
+        )->fetchAll() as $row) {
+            $products[(int) $row['promotion_id']][(int) $row['id']] = [
+                'code' => (string) $row['code'],
+                'name' => (string) $row['name'],
+                'category_id' => (int) $row['category_id'],
+            ];
+        }
+    }
+
     foreach ($promotions as $index => $promotion) {
         $promotions[$index]['categories'] = $categories[(int) $promotion['id']] ?? [];
+        $promotions[$index]['products'] = $products[(int) $promotion['id']] ?? [];
     }
 
     return $promotions;
+}
+
+/**
+ * promotion_products (014_promotion_products.sql): the models chosen
+ * one by one. When a promotion has models, only those models count and
+ * its categories are ignored.
+ */
+function promotion_products_ready(PDO $pdo): bool
+{
+    static $ready = null;
+
+    if ($ready === null) {
+        try {
+            $pdo->query('SELECT 1 FROM promotion_products LIMIT 1');
+            $ready = true;
+        } catch (PDOException) {
+            $ready = false;
+        }
+    }
+
+    return $ready;
+}
+
+/**
+ * Short tag for a model card: "3 x C$1,000" / "10% off · 1ª compra".
+ */
+function promotion_short_label(array $promotion): string
+{
+    $label = $promotion['type'] === 'bundle'
+        ? (int) $promotion['bundle_qty'] . ' x ' . currency_symbol() . number_format((float) $promotion['bundle_price'], abs((float) $promotion['bundle_price'] - round((float) $promotion['bundle_price'])) < 0.005 ? 0 : 2)
+        : rtrim(rtrim(number_format((float) $promotion['percent'], 2, '.', ''), '0'), '.') . '% off';
+
+    return (int) $promotion['first_purchase_only'] === 1 ? $label . ' · 1ª compra' : $label;
+}
+
+/**
+ * Active promotions in date today (with or without image).
+ */
+function current_promotions(PDO $pdo): array
+{
+    $today = date('Y-m-d');
+
+    return array_values(array_filter(
+        load_promotions($pdo, true),
+        static fn (array $promotion): bool => promotion_is_current($promotion, $today)
+    ));
+}
+
+/**
+ * Whether a product (by id, with its category) is part of the promotion.
+ */
+function promotion_applies_to(array $promotion, ?int $productId, ?int $categoryId): bool
+{
+    if (($promotion['products'] ?? []) !== []) {
+        return $productId !== null && isset($promotion['products'][$productId]);
+    }
+
+    return $promotion['categories'] === [] || ($categoryId !== null && isset($promotion['categories'][$categoryId]));
 }
 
 function find_promotion(PDO $pdo, int $promotionId): ?array
@@ -103,9 +181,17 @@ function find_promotion(PDO $pdo, int $promotionId): ?array
  */
 function promotion_summary(array $promotion): string
 {
-    $scope = $promotion['categories'] === []
-        ? 'todos los productos'
-        : implode(', ', $promotion['categories']);
+    $models = array_column($promotion['products'] ?? [], 'name');
+
+    if ($models !== []) {
+        $scope = count($models) <= 3
+            ? implode(', ', $models)
+            : count($models) . ' modelos seleccionados';
+    } else {
+        $scope = $promotion['categories'] === []
+            ? 'todos los productos'
+            : implode(', ', $promotion['categories']);
+    }
 
     $summary = $promotion['type'] === 'bundle'
         ? sprintf('%d por %s en %s', (int) $promotion['bundle_qty'], format_money($promotion['bundle_price']), $scope)
@@ -135,6 +221,11 @@ function promotion_for_js(array $promotion): array
         'starts_on' => $promotion['starts_on'],
         'ends_on' => $promotion['ends_on'],
         'categories' => array_keys($promotion['categories']),
+        // Product codes (lowercase); when not empty only these models count.
+        'products' => array_values(array_map(
+            static fn (array $product): string => mb_strtolower(trim($product['code'])),
+            $promotion['products'] ?? []
+        )),
     ];
 }
 
@@ -153,15 +244,17 @@ function promotion_is_current(array $promotion, string $date): bool
 
 /**
  * How much the promotion takes off these lines.
- * $lines: [['category_id' => ?int, 'quantity' => int, 'unit_price' => float], ...]
+ * $lines: [['product_id' => ?int, 'category_id' => ?int, 'quantity' => int, 'unit_price' => float], ...]
  */
 function promotion_discount_for(array $promotion, array $lines): float
 {
-    $categoryIds = array_map('intval', array_keys($promotion['categories']));
     $units = [];
 
     foreach ($lines as $line) {
-        if ($categoryIds !== [] && !in_array((int) ($line['category_id'] ?? 0), $categoryIds, true)) {
+        $productId = isset($line['product_id']) ? (int) $line['product_id'] : null;
+        $categoryId = isset($line['category_id']) ? (int) $line['category_id'] : null;
+
+        if (!promotion_applies_to($promotion, $productId, $categoryId)) {
             continue;
         }
 

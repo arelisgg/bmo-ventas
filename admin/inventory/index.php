@@ -1,20 +1,14 @@
 <?php declare(strict_types=1);
 require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
+require_once __DIR__ . '/../../includes/size-functions.php';
 require_admin();
 /*
 |--------------------------------------------------------------------------
 | Available Sizes
 |--------------------------------------------------------------------------
 */
-$availableSizes = [
-    '35',
-    '36',
-    '37',
-    '38',
-    '39',
-    '40',
-];
+$availableSizes = store_sizes();
 /*
 |--------------------------------------------------------------------------
 | Messages

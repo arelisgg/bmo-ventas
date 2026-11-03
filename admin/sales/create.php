@@ -329,13 +329,14 @@ if (
 
                     $subtotal += $lineTotal;
 
+                    $madeToOrderProduct = save_made_to_order_product($pdo, $item);
+
                     $promotionLines[] = [
+                        'product_id' => (int) $madeToOrderProduct['id'],
                         'category_id' => $item['custom_category_id'],
                         'quantity' => $item['quantity'],
                         'unit_price' => $item['unit_price'],
                     ];
-
-                    $madeToOrderProduct = save_made_to_order_product($pdo, $item);
                     save_made_to_order_cost($pdo, $madeToOrderProduct['id'], $item['custom_cost']);
 
                     $lineItems[] = [
@@ -391,6 +392,7 @@ if (
                 $subtotal += $lineTotal;
 
                 $promotionLines[] = [
+                    'product_id' => (int) $variant['product_id'],
                     'category_id' => $variant['category_id'] !== null ? (int) $variant['category_id'] : null,
                     'quantity' => $item['quantity'],
                     'unit_price' => $item['unit_price'],
@@ -3066,7 +3068,12 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                 const units = [];
 
                 lines.forEach(line => {
-                    if (promotion.categories.length > 0 && !promotion.categories.includes(line.category)) {
+                    // Models chosen one by one win over categories (promotion_applies_to() in PHP).
+                    if (promotion.products && promotion.products.length > 0) {
+                        if (!line.code || !promotion.products.includes(String(line.code).trim().toLowerCase())) {
+                            return;
+                        }
+                    } else if (promotion.categories.length > 0 && !promotion.categories.includes(line.category)) {
                         return;
                     }
 

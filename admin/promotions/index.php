@@ -23,6 +23,16 @@ $categories = $pdo->query(
 
 $categoryNames = array_column($categories, 'name', 'id');
 
+// Models that can be chosen one by one (014_promotion_products.sql).
+$productsReady = $tablesReady && promotion_products_ready($pdo);
+$productOptions = $productsReady ? $pdo->query(
+    'SELECT p.id, p.code, p.name, p.main_image, p.is_active, p.category_id
+     FROM products p
+     WHERE p.is_active = 1
+     ORDER BY p.category_id ASC, p.name ASC'
+)->fetchAll() : [];
+$productIds = array_flip(array_map(static fn (array $product): int => (int) $product['id'], $productOptions));
+
 $emptyForm = [
     'id' => '',
     'name' => '',
@@ -35,6 +45,7 @@ $emptyForm = [
     'ends_on' => '',
     'is_active' => true,
     'categories' => [],
+    'products' => [],
     'image_path' => '',
 ];
 
@@ -82,6 +93,10 @@ if ($tablesReady && $_SERVER['REQUEST_METHOD'] === 'POST') {
             array_map('intval', is_array($_POST['categories'] ?? null) ? $_POST['categories'] : []),
             static fn (int $id): bool => isset($categoryNames[$id])
         ));
+        $form['products'] = array_values(array_unique(array_filter(
+            array_map('intval', is_array($_POST['products'] ?? null) ? $_POST['products'] : []),
+            static fn (int $id): bool => isset($productIds[$id])
+        )));
 
         $values = [
             'name' => mb_substr($form['name'], 0, 150),
@@ -190,6 +205,18 @@ if ($tablesReady && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $insertCategory->execute(['promotion_id' => $savedId, 'category_id' => $categoryId]);
                 }
 
+                if ($productsReady) {
+                    $pdo->prepare('DELETE FROM promotion_products WHERE promotion_id = :id')->execute(['id' => $savedId]);
+
+                    $insertProduct = $pdo->prepare(
+                        'INSERT INTO promotion_products (promotion_id, product_id) VALUES (:promotion_id, :product_id)'
+                    );
+
+                    foreach ($form['products'] as $productId) {
+                        $insertProduct->execute(['promotion_id' => $savedId, 'product_id' => $productId]);
+                    }
+                }
+
                 $removeImage = ($_POST['remove_image'] ?? '') === '1';
 
                 if ($imagesReady && ($newImage !== null || $removeImage)) {
@@ -248,6 +275,7 @@ if ($tablesReady && $editId !== false && $_SERVER['REQUEST_METHOD'] !== 'POST') 
             'ends_on' => (string) ($promotion['ends_on'] ?? ''),
             'is_active' => (int) $promotion['is_active'] === 1,
             'categories' => array_keys($promotion['categories']),
+            'products' => array_keys($promotion['products'] ?? []),
             'image_path' => (string) ($promotion['image_path'] ?? ''),
         ];
     }
@@ -403,6 +431,43 @@ render_sales_layout_start('Promociones', 'promotions');
                     <p class="form-hint">Si no marcas ninguna, aplica a todos los productos.</p>
                 </div>
 
+                <?php if ($productsReady): ?>
+                    <div class="form-group form-group-full" data-promotion-products>
+                        <span class="form-label">Modelos donde aplica (opcional)</span>
+                        <div class="promotion-products-tools">
+                            <input class="form-input" type="search" placeholder="Buscar modelo o código..." data-promotion-search>
+                            <span class="promotion-products-count" data-promotion-count></span>
+                        </div>
+                        <div class="promotion-products-list">
+                            <?php $lastCategory = null; ?>
+                            <?php foreach ($productOptions as $product): ?>
+                                <?php if ($lastCategory !== (int) $product['category_id']): ?>
+                                    <?php $lastCategory = (int) $product['category_id']; ?>
+                                    <div class="promotion-products-group" data-promotion-group="<?= $lastCategory ?>">
+                                        <?= e($categoryNames[$lastCategory] ?? 'Sin categoría') ?>
+                                        <button type="button" class="promotion-products-all" data-promotion-all="<?= $lastCategory ?>">Marcar todos</button>
+                                    </div>
+                                <?php endif; ?>
+                                <label class="promotion-product" data-promotion-product data-category="<?= (int) $product['category_id'] ?>"
+                                    data-search="<?= e(mb_strtolower($product['name'] . ' ' . $product['code'])) ?>">
+                                    <input type="checkbox" name="products[]" value="<?= (int) $product['id'] ?>"
+                                        <?= in_array((int) $product['id'], $form['products'], true) ? 'checked' : '' ?>>
+                                    <?php if (!empty($product['main_image'])): ?>
+                                        <img src="<?= e(APP_BASE_URL . '/' . ltrim((string) $product['main_image'], '/')) ?>" alt="" loading="lazy">
+                                    <?php endif; ?>
+                                    <span><strong><?= e($product['name']) ?></strong><small><?= e($product['code']) ?></small></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <p class="form-hint">
+                            Si marcas modelos, la promoción aplica <strong>solo a esos modelos</strong> (en ventas, catálogo y PDF) y las categorías de arriba no se usan.
+                            Si no marcas ninguno, aplica a las categorías elegidas.
+                        </p>
+                    </div>
+                <?php elseif ($tablesReady): ?>
+                    <p class="form-hint form-group-full">Para elegir modelo por modelo, ve a Configuración y presiona ACTUALIZAR BASE DE DATOS.</p>
+                <?php endif; ?>
+
                 <div class="form-group form-group-full">
                     <div class="checkbox-row">
                         <label class="checkbox-label">
@@ -509,6 +574,47 @@ render_sales_layout_start('Promociones', 'promotions');
 
             type.addEventListener("change", sync);
             sync();
+
+            // Model picker: search, "marcar todos" per category and a counter.
+            const picker = form.querySelector("[data-promotion-products]");
+
+            if (picker) {
+                const items = [...picker.querySelectorAll("[data-promotion-product]")];
+                const count = picker.querySelector("[data-promotion-count]");
+                const search = picker.querySelector("[data-promotion-search]");
+
+                const updateCount = () => {
+                    const checked = items.filter(item => item.querySelector("input").checked).length;
+                    count.textContent = checked === 0 ? "Ningún modelo elegido: usa las categorías" : `${checked} modelo${checked === 1 ? "" : "s"} elegido${checked === 1 ? "" : "s"}`;
+                };
+
+                search.addEventListener("input", () => {
+                    const term = search.value.trim().toLowerCase();
+
+                    items.forEach(item => {
+                        item.hidden = term !== "" && !item.dataset.search.includes(term);
+                    });
+
+                    picker.querySelectorAll("[data-promotion-group]").forEach(group => {
+                        group.hidden = !items.some(item => !item.hidden && item.dataset.category === group.dataset.promotionGroup);
+                    });
+                });
+
+                picker.querySelectorAll("[data-promotion-all]").forEach(button => {
+                    button.addEventListener("click", () => {
+                        const group = items.filter(item => item.dataset.category === button.dataset.promotionAll && !item.hidden);
+                        const allChecked = group.every(item => item.querySelector("input").checked);
+
+                        group.forEach(item => {
+                            item.querySelector("input").checked = !allChecked;
+                        });
+                        updateCount();
+                    });
+                });
+
+                picker.addEventListener("change", updateCount);
+                updateCount();
+            }
         })();
     </script>
 

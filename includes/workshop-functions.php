@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/size-functions.php';
+
 require_once __DIR__ . '/sales-functions.php';
 
 
@@ -47,7 +49,7 @@ function workshop_statuses(): array
 
 function workshop_default_sizes(): array
 {
-    return ['35', '36', '37', '38', '39', '40'];
+    return store_sizes();
 }
 
 function workshop_order_number(int $orderId): string
@@ -71,6 +73,8 @@ function render_workshop_migration_notice(): void
         </p>
     </section>
 <?php
+
+require_once __DIR__ . '/size-functions.php';
 }
 
 
@@ -595,6 +599,8 @@ function render_workshop_model_block(string $index, array $model, array $product
         </div>
     </div>
 <?php
+
+require_once __DIR__ . '/size-functions.php';
 }
 
 function render_workshop_color_row(string $modelIndex, string $colorIndex, array $color, array $sizes): void
@@ -621,4 +627,6 @@ function render_workshop_color_row(string $modelIndex, string $colorIndex, array
             aria-label="Quitar color">Quitar</button>
     </div>
 <?php
+
+require_once __DIR__ . '/size-functions.php';
 }
