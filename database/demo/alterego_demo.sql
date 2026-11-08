@@ -6,7 +6,7 @@
 SET NAMES utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS promotion_products, promotion_categories, promotions, cash_movements, sale_payments, cash_sessions, workshop_order_lines, workshop_order_models, workshop_orders, sale_items, sales, expenses, product_images, product_variants, products, categories, admins, schema_migrations;
+DROP TABLE IF EXISTS order_items, orders, promotion_products, promotion_categories, promotions, cash_movements, sale_payments, cash_sessions, workshop_order_lines, workshop_order_models, workshop_orders, sale_items, sales, expenses, product_images, product_variants, products, categories, admins, schema_migrations;
 
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!40101 SET character_set_client = utf8mb4 */;

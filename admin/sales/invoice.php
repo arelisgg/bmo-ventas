@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/sales-functions.php';
 require_once __DIR__ . '/../../includes/invoice-functions.php';
+require_once __DIR__ . '/../../includes/payment-functions.php';
 
 require_admin();
 
@@ -481,6 +482,23 @@ $base = APP_BASE_URL;
                 <td>TOTAL</td>
                 <td class="num"><?= e(format_money($totals['total'])) ?></td>
             </tr>
+            <?php
+            // Paid in parts (anticipo + saldo): what was paid and what is owed.
+            $invoicePayments = $sale['doc_type'] === 'invoice' && payment_tables_exist($pdo) ? sale_payments($pdo, (int) $sale['id']) : [];
+            $invoicePaid = round(array_sum(array_map('floatval', array_column($invoicePayments, 'amount'))), 2);
+            ?>
+            <?php if ($invoicePayments !== [] && $sale['status'] !== 'cancelled' && $invoicePaid + PAYMENT_TOLERANCE < (float) $totals['total']): ?>
+                <?php foreach ($invoicePayments as $invoicePayment): ?>
+                    <tr>
+                        <td><?= e($invoicePayment['note'] ?: 'Abono') ?> · <?= e(date('d/m/Y', strtotime((string) $invoicePayment['paid_at']))) ?></td>
+                        <td class="num">-<?= e(format_money($invoicePayment['amount'])) ?></td>
+                    </tr>
+                <?php endforeach; ?>
+                <tr class="grand">
+                    <td>SALDO PENDIENTE</td>
+                    <td class="num"><?= e(format_money(max(0, (float) $totals['total'] - $invoicePaid))) ?></td>
+                </tr>
+            <?php endif; ?>
         </table>
 
         <div class="invoice-note">

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/sales-functions.php';
 require_once __DIR__ . '/../../includes/sales-query.php';
+require_once __DIR__ . '/../../includes/payment-functions.php';
 require_once __DIR__ . '/_layout.php';
 
 require_admin();
@@ -43,6 +44,7 @@ if ($tablesReady) {
             s.payment_method,
             s.status,
             s.total,
+            ' . sale_paid_sql($pdo, 's.id') . ' AS paid_amount,
             s.sold_at,
             (
                 SELECT COALESCE(SUM(si.quantity), 0)
@@ -82,7 +84,7 @@ if ($tablesReady) {
         'SELECT
             COUNT(*) AS sales_count,
             COALESCE(SUM(s.total), 0) AS revenue,
-            COALESCE(SUM(CASE WHEN s.status = \'pending\' THEN s.total ELSE 0 END), 0) AS pending_amount,
+            COALESCE(SUM(CASE WHEN s.status = \'pending\' THEN GREATEST(s.total - ' . sale_paid_sql($pdo, 's.id') . ', 0) ELSE 0 END), 0) AS pending_amount,
             COALESCE(SUM((
                 SELECT SUM(si.quantity)
                 FROM sale_items si
@@ -328,6 +330,11 @@ render_sales_layout_start('Ventas');
                                 <span class="status-badge sale-status-<?= e($sale['status']) ?>">
                                     <?= e(sale_option_label($statusLabels, $sale['status'])) ?>
                                 </span>
+                                <?php if ($sale['status'] === 'pending' && $sale['doc_type'] === 'invoice' && (float) $sale['paid_amount'] > 0): ?>
+                                    <div class="product-code">
+                                        Abonado <?= e(format_money($sale['paid_amount'])) ?> · Saldo <?= e(format_money(max(0, (float) $sale['total'] - (float) $sale['paid_amount']))) ?>
+                                    </div>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <a class="table-action-link"

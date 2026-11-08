@@ -10,6 +10,7 @@ require_once __DIR__ . '/../../includes/wholesale-functions.php';
 require_once __DIR__ . '/../../includes/finance-functions.php';
 require_once __DIR__ . '/../../includes/payment-functions.php';
 require_once __DIR__ . '/../../includes/promotion-functions.php';
+require_once __DIR__ . '/../../includes/order-functions.php';
 require_once __DIR__ . '/_layout.php';
 
 require_admin();
@@ -71,13 +72,37 @@ $form = [
     'promotion_id' => '',
     'notes' => '',
     'sold_at' => date('Y-m-d\TH:i'),
+    // First payment (anticipo) of a pending invoice, e.g. half of a
+    // "por encargo" sale; the rest is added later from the sale view.
+    'advance' => '',
 ];
 
 $formItems = [];
 
 if ($editData !== null && $_SERVER['REQUEST_METHOD'] !== 'POST') {
-    $form = $editData['form'];
+    $form = $editData['form'] + ['advance' => ''];
     $formItems = $editData['items'];
+}
+
+/*
+| From a catalog order (?from_order=ID, admin/orders/): customer and
+| models come filled in; saving links the order to the new sale.
+*/
+$fromOrderId = $editData === null
+    ? filter_var($_GET['from_order'] ?? $_POST['from_order'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]])
+    : false;
+$fromOrder = $tablesReady && $fromOrderId !== false && orders_tables_exist($pdo) ? load_order($pdo, $fromOrderId) : null;
+
+if ($fromOrder !== null && $fromOrder['sale_id'] !== null) {
+    // Already sold: go to that sale instead of creating another one.
+    header('Location: ' . APP_BASE_URL . '/admin/sales/view.php?id=' . (int) $fromOrder['sale_id']);
+    exit;
+}
+
+if ($fromOrder !== null && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $orderForm = order_sale_form($pdo, $fromOrder);
+    $form = $orderForm['form'] + $form;
+    $formItems = $orderForm['items'];
 }
 
 
@@ -166,6 +191,13 @@ if (
     }
 
     $discount = parse_money_input($form['discount']);
+
+    $takesAdvance = $editData === null && $form['doc_type'] === 'invoice' && $form['status'] === 'pending';
+    $advance = $takesAdvance && $form['advance'] !== '' ? parse_money_input($form['advance']) : 0.0;
+
+    if ($error === '' && $advance === null) {
+        $error = 'El anticipo no es válido.';
+    }
 
     if ($error === '' && $discount === null) {
         $error = 'El descuento no es válido.';
@@ -624,7 +656,19 @@ if (
                     settle_sale_balance($pdo, $saleId, $form['payment_method']);
                 }
 
+                if ($takesAdvance && $advance > 0) {
+                    if ($advance > round($subtotal - $discount, 2) + PAYMENT_TOLERANCE) {
+                        throw new DomainException('El anticipo no puede ser mayor que el total. Si paga todo, elige «Pagada».');
+                    }
+
+                    add_sale_payment($pdo, $saleId, $form['payment_method'], $advance, 'Anticipo');
+                }
+
                 sync_sale_payment_status($pdo, $saleId);
+            }
+
+            if ($fromOrder !== null) {
+                link_order_to_sale($pdo, (int) $fromOrder['id'], $saleId);
             }
 
             $pdo->commit();
@@ -833,6 +877,13 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
     <?php endif; ?>
 
     <form class="admin-form" method="post" id="saleForm" enctype="multipart/form-data" novalidate>
+        <?php if ($fromOrder !== null): ?>
+            <input type="hidden" name="from_order" value="<?= (int) $fromOrder['id'] ?>">
+            <div class="admin-notice">
+                Venta del pedido <strong><?= e(order_number((int) $fromOrder['id'])) ?></strong>: revisa tallas, precios y
+                promociones antes de guardar. Al guardar, el pedido queda como <strong>Vendido</strong>.
+            </div>
+        <?php endif; ?>
         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
 
         <section class="form-section">
@@ -1431,11 +1482,27 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
                     <label class="form-label" for="status">Estado</label>
                     <select class="form-select" id="status" name="status">
                         <?php foreach ($newSaleStatuses as $value => $label): ?>
-                            <option value="<?= e($value) ?>" <?= $form['status'] === $value ? 'selected' : '' ?>><?= e($label) ?>
+                            <option value="<?= e($value) ?>" <?= $form['status'] === $value ? 'selected' : '' ?>><?= e($value === 'pending' && $editData === null ? 'Pendiente de pago (pago en partes)' : $label) ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
+                    <?php if ($editData === null): ?>
+                        <small class="sale-advance-tip" id="saleAdvanceTip" hidden>
+                            Venta por encargo: elige <strong>Pendiente de pago</strong> para cobrar un anticipo ahora y el saldo al entregar.
+                        </small>
+                    <?php endif; ?>
                 </div>
+                <?php if ($editData === null): ?>
+                    <div class="form-group sale-advance" id="saleAdvanceGroup" hidden>
+                        <label class="form-label" for="advance">Anticipo / primer pago (<?= e(currency_symbol()) ?>)</label>
+                        <div class="sale-advance-row">
+                            <input class="form-input" type="text" inputmode="decimal" id="advance" name="advance"
+                                value="<?= e($form['advance']) ?>" placeholder="0.00">
+                            <button class="admin-button admin-button-outline" type="button" data-advance-percent="50">50%</button>
+                        </div>
+                        <small class="sale-advance-hint" id="saleAdvanceHint"></small>
+                    </div>
+                <?php endif; ?>
                 <div class="form-group">
                     <label class="form-label" for="sold_at">Fecha</label>
                     <input class="form-input" type="datetime-local" id="sold_at" name="sold_at"
@@ -3581,4 +3648,60 @@ render_sales_layout_start($editData !== null ? 'Editar ' . ($editData['sale']['s
         });
     </script>
 <?php endif; ?>
-<?php render_sales_layout_end(); ?>
+<?php if ($tablesReady && $editData === null): ?>
+<script>
+    // Anticipo (pago en partes): shown for a pending invoice; the hint
+    // says what will still be owed. Encargo rows suggest this option.
+    document.addEventListener("DOMContentLoaded", () => {
+        const form = document.getElementById("saleForm");
+        const group = document.getElementById("saleAdvanceGroup");
+
+        if (!form || !group) {
+            return;
+        }
+
+        const status = document.getElementById("status");
+        const advance = document.getElementById("advance");
+        const hint = document.getElementById("saleAdvanceHint");
+        const tip = document.getElementById("saleAdvanceTip");
+        const totalOutput = document.getElementById("saleGrandTotal");
+        const symbol = <?= json_encode(currency_symbol(), JSON_UNESCAPED_UNICODE) ?>;
+        const number = text => parseFloat(String(text).replace(/[^0-9.\-]/g, "")) || 0;
+        const money = value => symbol + value.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const isInvoice = () => (form.querySelector('input[name="doc_type"]:checked')?.value || "invoice") === "invoice";
+        const hasEncargo = () => Array.from(form.querySelectorAll('[name="items[source][]"]'))
+            .some(select => select.value === "workshop");
+
+        function update() {
+            const show = isInvoice() && status.value === "pending";
+            const total = number(totalOutput.textContent);
+            const paid = Math.max(0, number(advance.value));
+
+            group.hidden = !show;
+            tip.hidden = !(isInvoice() && status.value === "paid" && hasEncargo());
+
+            if (!show) {
+                return;
+            }
+
+            hint.textContent = paid > total + 0.009
+                ? "El anticipo es mayor que el total."
+                : `Saldo pendiente: ${money(Math.max(0, total - paid))}. El resto se registra después en la venta con «REGISTRAR PAGO O ABONO».`;
+            hint.classList.toggle("is-error", paid > total + 0.009);
+        }
+
+        group.querySelector("[data-advance-percent]").addEventListener("click", event => {
+            const percent = Number(event.currentTarget.dataset.advancePercent) / 100;
+            advance.value = (Math.round(number(totalOutput.textContent) * percent * 100) / 100).toFixed(2);
+            update();
+        });
+
+        form.addEventListener("input", update);
+        form.addEventListener("change", update);
+        new MutationObserver(update).observe(totalOutput, { childList: true, characterData: true, subtree: true });
+        update();
+    });
+</script>
+<?php endif; ?>
+
+<?php render_sales_layout_end(); ?>

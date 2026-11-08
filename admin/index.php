@@ -6,6 +6,7 @@ require_once __DIR__ . '/../config/database.php';
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/sales-functions.php';
 require_once __DIR__ . '/../includes/backup-functions.php';
+require_once __DIR__ . '/../includes/payment-functions.php';
 
 require_admin();
 
@@ -108,7 +109,7 @@ if ($salesReady) {
             COALESCE(SUM(CASE WHEN sold_at >= DATE_FORMAT(CURDATE(), \'%Y-%m-01\') THEN 1 ELSE 0 END), 0) AS month_count,
             COALESCE(SUM(CASE WHEN sold_at >= CURDATE() - INTERVAL WEEKDAY(CURDATE()) DAY THEN total ELSE 0 END), 0) AS week_total,
             COALESCE(SUM(CASE WHEN sold_at >= CURDATE() - INTERVAL WEEKDAY(CURDATE()) DAY THEN 1 ELSE 0 END), 0) AS week_count,
-            COALESCE(SUM(CASE WHEN status = \'pending\' THEN total ELSE 0 END), 0) AS pending_total,
+            COALESCE(SUM(CASE WHEN status = \'pending\' THEN GREATEST(total - ' . sale_paid_sql($pdo, 'sales.id') . ', 0) ELSE 0 END), 0) AS pending_total,
             COALESCE(SUM(CASE WHEN status = \'pending\' THEN 1 ELSE 0 END), 0) AS pending_count
          FROM sales
          WHERE status != \'cancelled\' AND doc_type = \'invoice\''
@@ -386,6 +387,15 @@ if ($salesReady && admin_can('sales')) {
             ? (int) $salesStatistics['pending_count'] . ' venta(s) · Ver pendientes →'
             : 'Nada pendiente',
         (int) $salesStatistics['pending_count'] > 0 ? $base . '/admin/sales/?status=pending&amp;from=2000-01-01' : null];
+}
+
+// Catalog cart orders waiting for the shop (admin/orders/).
+require_once __DIR__ . '/../includes/order-functions.php';
+
+if (admin_can('orders') && orders_tables_exist($pdo)) {
+    $newOrders = count_new_orders($pdo);
+    array_unshift($statCards, ['orders', 'Pedidos nuevos', (string) $newOrders, false,
+        $newOrders > 0 ? 'Atender pedidos →' : 'Ver pedidos →', $base . '/admin/orders/']);
 }
 
 $statCards[] = ['products', 'Modelos', (string) (int) $statistics['total_products'], false,

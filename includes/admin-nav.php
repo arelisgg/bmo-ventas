@@ -24,6 +24,7 @@ function admin_nav_items(): array
         'products' => ['Productos', '/admin/products/'],
         'categories' => ['Categorías', '/admin/categories/'],
         'inventory' => ['Inventario', '/admin/inventory/'],
+        'orders' => ['Pedidos', '/admin/orders/'],
         'sales' => ['Ventas', '/admin/sales/'],
         'promotions' => ['Promociones', '/admin/promotions/'],
         'cash' => ['Caja', '/admin/cash/'],
@@ -46,6 +47,7 @@ function admin_icon(string $name): string
         'products' => '<path d="M3 16.5c0-1 .8-1.8 1.8-1.8h5.4c1 0 1.9-.4 2.5-1.1l3.6-4.1c.6-.7 1.6-.8 2.3-.2l1.9 1.6c.9.8 1.5 1.9 1.5 3.1v2.5c0 .8-.7 1.5-1.5 1.5H4.5c-.8 0-1.5-.7-1.5-1.5z"/><path d="M8 14.7v-3"/><path d="M3 18h18"/>',
         'categories' => '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/>',
         'inventory' => '<path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5"/><path d="M12 13v8"/>',
+        'orders' => '<circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h2.6l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.2l1.6-6.8H6.1"/>',
         'sales' => '<path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/>',
         'promotions' => '<path d="M12 2v4"/><path d="M4.9 4.9 7.8 7.8"/><path d="M19.1 4.9l-2.9 2.9"/><circle cx="12" cy="14" r="7"/><path d="m9.5 16.5 5-5"/><circle cx="9.8" cy="11.8" r=".6"/><circle cx="14.2" cy="16.2" r=".6"/>',
         'cash' => '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 12h.01M18 12h.01"/>',
@@ -73,6 +75,26 @@ function admin_icon(string $name): string
         $paths[$name] . '</svg>';
 }
 
+/**
+ * New catalog orders, for the badge next to "Pedidos".
+ */
+function admin_nav_new_orders(): int
+{
+    $pdo = $GLOBALS['pdo'] ?? null;
+
+    if (!$pdo instanceof PDO) {
+        return 0;
+    }
+
+    require_once __DIR__ . '/order-functions.php';
+
+    try {
+        return count_new_orders($pdo);
+    } catch (Throwable) {
+        return 0;
+    }
+}
+
 function render_admin_nav(string $active = ''): void
 {
     $base = APP_BASE_URL;
@@ -83,6 +105,9 @@ function render_admin_nav(string $active = ''): void
                     <?php if (function_exists('admin_can') && !admin_can($key)) continue; ?>
                     <a class="<?= $key === $active ? 'active' : '' ?>" href="<?= e($base . $path) ?>">
                         <?= admin_icon($key) ?><span><?= e($label) ?></span>
+                        <?php if ($key === 'orders' && ($newOrders = admin_nav_new_orders()) > 0): ?>
+                            <em class="admin-nav-count" title="Pedidos nuevos"><?= $newOrders ?></em>
+                        <?php endif; ?>
                     </a>
                 <?php endforeach; ?>
                 <a href="<?= e($base) ?>/" target="_blank" rel="noopener noreferrer">

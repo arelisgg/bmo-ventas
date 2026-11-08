@@ -30,6 +30,8 @@ require_admin();
 const CATALOG_PER_PAGE = 9;
 
 $includeSoldOut = ($_GET['todos'] ?? '') === '1';
+// Both prices by default; ?precio=detalle leaves only the retail price.
+$retailOnly = ($_GET['precio'] ?? '') === 'detalle';
 $wholesaleReady = wholesale_columns_exist($pdo);
 // Current promotions: each card is tagged only with the ones that apply to it.
 $promotions = promotion_tables_exist($pdo) ? current_promotions($pdo) : [];
@@ -41,7 +43,8 @@ $months = [
 ];
 $now = new DateTimeImmutable('now');
 $dateLong = $now->format('j') . ' de ' . $months[(int) $now->format('n')] . ' de ' . $now->format('Y');
-$fileTitle = 'Catalogo ' . $now->format('d-m-Y');
+$showWholesale = $wholesaleReady && !$retailOnly;
+$fileTitle = 'Catálogo Entrega Inmediata';
 $businessName = business_name();
 $hasWhatsapp = whatsapp_digits() !== '';
 
@@ -274,7 +277,7 @@ foreach ($categories as $category) {
     $sections[] = [
         'name' => (string) $category['name'],
         'cover' => $cover,
-        'header' => catalog_header($items, $wholesaleReady),
+        'header' => catalog_header($items, $showWholesale),
         'pages' => array_chunk($items, CATALOG_PER_PAGE),
     ];
 }
@@ -304,7 +307,7 @@ function catalog_link(array $query): string
     return APP_BASE_URL . '/admin/products/catalog.php' . ($query === [] ? '' : '?' . http_build_query($query));
 }
 
-$currentQuery = ['todos' => $includeSoldOut ? '1' : null];
+$currentQuery = ['precio' => $retailOnly ? 'detalle' : null, 'todos' => $includeSoldOut ? '1' : null];
 
 ?>
 <!DOCTYPE html>
@@ -494,10 +497,10 @@ $currentQuery = ['todos' => $includeSoldOut ? '1' : null];
             position: absolute;
             right: 70pt;
             bottom: 112pt;
-            color: var(--script);
+            color: #3a1f14;
             font-size: 58pt;
             line-height: 1;
-            text-shadow: 0 0 18pt rgba(255, 245, 235, 0.55);
+            text-shadow: 0 0 10pt rgba(255, 248, 240, 0.9), 0 0 24pt rgba(255, 248, 240, 0.75);
         }
 
         .divider-note {
@@ -683,7 +686,7 @@ $currentQuery = ['todos' => $includeSoldOut ? '1' : null];
 <body>
     <div class="catalog-toolbar">
         <div>
-            <strong>Catálogo · <?= e($dateLong) ?> · <?= (int) $modelCount ?> modelos</strong>
+            <strong>Catálogo <?= $showWholesale ? 'detalle y mayorista' : 'al detalle' ?> · <?= e($dateLong) ?> · <?= (int) $modelCount ?> modelos</strong>
             <small>
                 Tallas con stock de este momento.
                 <?php if ($hiddenSoldOut > 0): ?>
@@ -694,6 +697,11 @@ $currentQuery = ['todos' => $includeSoldOut ? '1' : null];
         </div>
         <div class="catalog-toolbar-actions">
             <a href="<?= e(APP_BASE_URL) ?>/admin/products/">← Productos</a>
+            <?php if ($wholesaleReady): ?>
+                <a href="<?= e(catalog_link(['precio' => $retailOnly ? null : 'detalle'] + $currentQuery)) ?>">
+                    <?= $retailOnly ? 'Con precio mayorista' : 'Solo precio al detalle' ?>
+                </a>
+            <?php endif; ?>
             <a href="<?= e(catalog_link(['todos' => $includeSoldOut ? null : '1'] + $currentQuery)) ?>">
                 <?= $includeSoldOut ? 'Solo con stock' : 'Incluir agotados' ?>
             </a>
@@ -764,7 +772,7 @@ $currentQuery = ['todos' => $includeSoldOut ? '1' : null];
                                     </div>
                                     <div class="product-sizes"><?= $soldOut ? 'Agotado' : e($product['sizes_label']) ?></div>
                                     <div class="product-name"><?= e($product['name']) ?></div>
-                                    <?php foreach (catalog_card_prices($product, $section['header'], $wholesaleReady) as $priceLine): ?>
+                                    <?php foreach (catalog_card_prices($product, $section['header'], $showWholesale) as $priceLine): ?>
                                         <div class="product-price"><?= e($priceLine) ?></div>
                                     <?php endforeach; ?>
                                     <?php foreach ($promotions as $promotion): ?>

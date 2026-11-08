@@ -48,6 +48,17 @@ function current_admin_id(): ?int
 |--------------------------------------------------------------------------
 */
 
+/**
+ * SQL for what a sale has paid so far (abonos), to subtract from the
+ * total of pending sales. "0" before migration 011.
+ */
+function sale_paid_sql(PDO $pdo, string $saleIdColumn): string
+{
+    return payment_tables_exist($pdo)
+        ? '(SELECT COALESCE(SUM(sp.amount), 0) FROM sale_payments sp WHERE sp.sale_id = ' . $saleIdColumn . ')'
+        : '0';
+}
+
 function sale_payments(PDO $pdo, int $saleId): array
 {
     $statement = $pdo->prepare(

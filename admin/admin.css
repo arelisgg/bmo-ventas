@@ -7772,3 +7772,315 @@ body {
     color: #8d6c58;
     font-size: 0.72rem;
 }
+
+/* =========================================================
+   PEDIDOS (catalog cart orders, 2026-11)
+   ========================================================= */
+
+.admin-nav-count {
+    margin-left: auto;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #9c6844;
+    color: #fff;
+    font-size: 0.7rem;
+    font-style: normal;
+    font-weight: 600;
+    line-height: 20px;
+    text-align: center;
+}
+
+.order-status-new {
+    background: #fbf3e2;
+    color: #7a5a1c;
+}
+
+.order-status-confirmed {
+    background: #e9f0f7;
+    color: #2f4f6e;
+}
+
+.order-status-sold {
+    background: #edf5eb;
+    color: #31562d;
+}
+
+.order-status-cancelled {
+    background: #f2ece8;
+    color: #7c6e65;
+    text-decoration: line-through;
+}
+
+.orders-status-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 18px;
+}
+
+.orders-status-tabs a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border: 1px solid rgba(74, 46, 32, 0.16);
+    border-radius: 999px;
+    background: #fff;
+    color: #4a2e20;
+    font-size: 0.82rem;
+    font-weight: 500;
+}
+
+.orders-status-tabs a span {
+    min-width: 22px;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: #f3ece3;
+    font-size: 0.72rem;
+    text-align: center;
+}
+
+.orders-status-tabs a.is-active {
+    border-color: #4a2e20;
+    background: #4a2e20;
+    color: #fff;
+}
+
+.orders-status-tabs a.is-active span {
+    background: rgba(255, 255, 255, 0.18);
+}
+
+.orders-filters {
+    grid-template-columns: minmax(0, 360px);
+}
+
+.order-stock {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.72rem;
+}
+
+.order-stock.is-ok {
+    color: #31562d;
+}
+
+.order-stock.is-missing {
+    color: #a0522d;
+}
+
+.order-update-form {
+    display: grid;
+    gap: 8px;
+}
+
+.order-update-form .admin-button {
+    justify-self: start;
+    margin-top: 4px;
+}
+
+.orders-status-tabs a,
+.orders-status-tabs a:hover {
+    text-decoration: none;
+}
+
+/* Pago en partes: anticipo in the sale form (2026-11) */
+.sale-advance-row {
+    display: flex;
+    gap: 8px;
+}
+
+.sale-advance-row .form-input {
+    flex: 1;
+    min-width: 0;
+}
+
+.sale-advance-hint,
+.sale-advance-tip {
+    display: block;
+    margin-top: 6px;
+    color: #7c6e65;
+    font-size: 0.76rem;
+    line-height: 1.45;
+}
+
+.sale-advance-tip {
+    color: #9c6844;
+}
+
+.sale-advance-hint.is-error {
+    color: #b23b2b;
+}
+
+.sale-advance[hidden],
+.sale-advance-tip[hidden] {
+    display: none;
+}
+
+/*
+|--------------------------------------------------------------------------
+| Inventario: filtros por modelo, color y talla (2026-11-08)
+|--------------------------------------------------------------------------
+*/
+.inventory-filters {
+    margin-bottom: 24px;
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 20px 28px;
+    align-items: end;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    border-radius: 16px;
+}
+
+.inventory-filter-fields {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 14px;
+}
+
+.inventory-filter-field {
+    flex: 1 1 150px;
+    min-width: 0;
+}
+
+.inventory-filter-name {
+    flex: 2 1 220px;
+}
+
+.inventory-filter-field .form-input {
+    width: 100%;
+}
+
+.inventory-filter-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    color: var(--admin-text);
+    font-size: 0.82rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.inventory-filter-check input {
+    width: 16px;
+    height: 16px;
+    accent-color: var(--admin-accent);
+}
+
+.inventory-filter-clear {
+    min-height: 44px;
+    padding: 0 14px;
+    background: transparent;
+    border: 1px solid var(--admin-border);
+    border-radius: 999px;
+    color: var(--admin-muted);
+    font: inherit;
+    font-size: 0.78rem;
+    cursor: pointer;
+}
+
+.inventory-filter-clear:hover {
+    color: var(--admin-text);
+    border-color: var(--admin-text);
+}
+
+.inventory-filter-result {
+    min-width: 200px;
+    max-width: 340px;
+    text-align: right;
+}
+
+.inventory-filter-total span {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--admin-muted);
+    font-size: 0.62rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+}
+
+.inventory-filter-total strong {
+    font-family: var(--heading-font);
+    font-size: 2.4rem;
+    font-weight: 600;
+    line-height: 1;
+}
+
+.inventory-filter-detail {
+    margin: 6px 0 0;
+    color: var(--admin-muted);
+    font-size: 0.78rem;
+}
+
+.inventory-filter-breakdown {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.inventory-filter-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 5px;
+    padding: 4px 9px;
+    background: var(--admin-bg);
+    border-radius: 999px;
+    font-size: 0.74rem;
+}
+
+.inventory-filter-chip small {
+    color: var(--admin-muted);
+    font-size: 0.7rem;
+}
+
+.inventory-filter-chip.is-empty {
+    opacity: 0.5;
+}
+
+.inventory-filter-empty {
+    margin-bottom: 24px;
+}
+
+.inventory-total-match strong {
+    color: var(--admin-accent);
+}
+
+.inventory-size-item.inventory-size-dimmed {
+    opacity: 0.3;
+}
+
+.inventory-size-item.inventory-size-match .inventory-stock-input {
+    border-color: var(--admin-accent);
+    box-shadow: 0 0 0 2px var(--admin-border);
+    font-weight: 600;
+}
+
+.inventory-product-card[hidden],
+.inventory-color-row[hidden],
+.inventory-filters [hidden] {
+    display: none !important;
+}
+
+@media (max-width: 900px) {
+    .inventory-filters {
+        grid-template-columns: 1fr;
+        padding: 18px 16px;
+    }
+
+    .inventory-filter-result {
+        max-width: none;
+        text-align: left;
+    }
+
+    .inventory-filter-breakdown {
+        justify-content: flex-start;
+    }
+}

@@ -394,6 +394,11 @@ $socialLinks = array_filter([
         </a> <a href="#contact">
           Contacto
         </a> </nav>
+      <button class="cart-toggle" id="cartToggle" type="button" aria-label="Ver carrito" aria-controls="cartPanel">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h2.6l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.2l1.6-6.8H6.1"/></svg>
+        <span class="cart-toggle-label">Carrito</span>
+        <span class="cart-count" id="cartCount" hidden>0</span>
+      </button>
     </div>
   </header>
   <main id="top">
@@ -669,6 +674,15 @@ $socialLinks = array_filter([
 
               'total_stock' =>
                 (int) $product['total_stock'],
+
+              // Cart (carrito): numeric price and category for promotions.
+              'price_value' =>
+                $product['price'] !== null
+                ? (float) $product['price']
+                : null,
+
+              'category_id' =>
+                (int) $product['category_id'],
 
               'wholesale' =>
                 wholesale_label($product),
@@ -965,9 +979,18 @@ $socialLinks = array_filter([
               Selecciona
             </strong> </span>
           <div class="modal-size-options" id="modalSizeOptions"></div>
-        </div> <button class="modal-buy-button" id="modalBuyButton" type="button" disabled>
-          SELECCIONA UNA TALLA
+        </div>
+        <p class="modal-size-hint">Puedes marcar varias tallas del mismo modelo.</p>
+        <div class="modal-quantity" id="modalQuantity" hidden>
+          <span class="modal-option-title">Cantidad por talla</span>
+          <div class="modal-size-lines" id="modalSizeLines"></div>
+        </div>
+        <button class="modal-buy-button" id="modalBuyButton" type="button" disabled>
+          SELECCIONA UNA O VARIAS TALLAS
         </button>
+        <p class="modal-cart-added" id="modalCartAdded" hidden>
+          Agregado al carrito. <button type="button" data-open-cart>Ver carrito y enviar pedido</button>
+        </p>
         <div class="modal-wholesale-order" id="modalWholesaleOrder" hidden>
           <div class="modal-wholesale-panel" id="modalWholesalePanel" hidden>
             <span class="modal-option-title">
@@ -976,7 +999,7 @@ $socialLinks = array_filter([
             <div class="modal-wholesale-sizes" id="modalWholesaleSizes"></div>
             <p class="modal-wholesale-summary" id="modalWholesaleSummary"></p>
             <button class="modal-buy-button modal-wholesale-button" id="modalWholesaleButton" type="button" disabled>
-              PEDIR AL POR MAYOR
+              AGREGAR AL CARRITO
             </button>
           </div>
         </div>
@@ -988,11 +1011,70 @@ $socialLinks = array_filter([
       </div>
     </div>
   </div>
+  <button class="cart-fab" id="cartFab" type="button" aria-label="Ver carrito" aria-controls="cartPanel" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M2.5 3.5h2.6l2.4 11.2a1.6 1.6 0 0 0 1.6 1.3h8.6a1.6 1.6 0 0 0 1.6-1.2l1.6-6.8H6.1"/></svg>
+    <span>Ver pedido</span>
+    <strong class="cart-count" id="cartFabCount">0</strong>
+  </button>
+
+  <div class="cart-panel" id="cartPanel" hidden>
+    <div class="cart-panel-backdrop" data-close-cart></div>
+    <aside class="cart-panel-dialog" role="dialog" aria-modal="true" aria-labelledby="cartTitle">
+      <div class="cart-panel-header">
+        <div>
+          <span class="eyebrow">CARRITO</span>
+          <h2 id="cartTitle">Tu pedido</h2>
+        </div>
+        <button class="cart-panel-close" type="button" data-close-cart aria-label="Cerrar">×</button>
+      </div>
+      <div class="cart-panel-body">
+        <div class="cart-empty" id="cartEmpty">
+          <p>Tu carrito está vacío.</p>
+          <p>Abre un modelo, elige color y talla, y toca <strong>AGREGAR AL CARRITO</strong>. Puedes agregar varios modelos.</p>
+          <button class="button button-dark" type="button" data-close-cart>Ver catálogo</button>
+        </div>
+        <ul class="cart-lines" id="cartLines"></ul>
+        <div class="cart-summary" id="cartSummary" hidden></div>
+        <div class="cart-customer" id="cartCustomer" hidden>
+          <label>
+            <span>Tu nombre (opcional)</span>
+            <input type="text" id="cartName" maxlength="80" autocomplete="name">
+          </label>
+          <label>
+            <span>Tu WhatsApp o teléfono (opcional)</span>
+            <input type="tel" id="cartPhone" maxlength="40" autocomplete="tel" inputmode="tel">
+          </label>
+          <input type="text" id="cartWebsite" name="website" tabindex="-1" autocomplete="off" class="cart-hp" aria-hidden="true">
+          <label>
+            <span>Nota para la tienda (opcional)</span>
+            <textarea id="cartNote" rows="2" maxlength="300" placeholder="Ej.: entrega en Managua, otro color..."></textarea>
+          </label>
+        </div>
+      </div>
+      <div class="cart-panel-footer" id="cartFooter" hidden>
+        <p class="cart-sent" id="cartSent" hidden>
+          Abrimos WhatsApp con tu pedido. ¿Ya lo enviaste?
+          <button type="button" id="cartClearSent">Vaciar carrito</button>
+        </p>
+        <p class="cart-footer-total"><span>Total estimado</span><strong id="cartFooterTotal"></strong></p>
+        <button class="modal-buy-button cart-send-button" id="cartSend" type="button">
+          ENVIAR PEDIDO POR WHATSAPP
+        </button>
+        <div class="cart-footer-links">
+          <button type="button" data-close-cart>Seguir comprando</button>
+          <button type="button" id="cartClear">Vaciar carrito</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
   <script>
 
     const BUSINESS_NAME = <?= json_encode(business_name(), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
     const WHATSAPP_NUMBER = <?= json_encode(whatsapp_digits()) ?>;
     const CURRENCY_SYMBOL = <?= json_encode(currency_symbol(), JSON_HEX_TAG | JSON_UNESCAPED_UNICODE) ?>;
+    // Current promotions, to estimate the cart total (the shop confirms it).
+    const CART_PROMOTIONS = <?= json_encode(array_map('promotion_for_js', $currentPromotions), JSON_HEX_TAG | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE) ?>;
 
     document.addEventListener(
       "DOMContentLoaded",
@@ -1503,13 +1585,27 @@ $socialLinks = array_filter([
           document.getElementById("modalPurchaseMode");
 
         // Retail purchase pieces: size picker block and buy button.
+                const modalQuantity =
+          document.getElementById("modalQuantity");
+
+        const modalSizeLines =
+          document.getElementById("modalSizeLines");
+
+        const modalCartAdded =
+          document.getElementById("modalCartAdded");
+
+        // Sizes chosen in retail mode: size -> {item, quantity}.
+        const selectedSizes = new Map();
+
         const retailPieces = [
           modalSizeOptions.closest(".modal-option"),
+          document.querySelector(".modal-size-hint"),
           modalBuyButton
         ];
 
-        function setWholesaleOpen(isOpen) {
+                function setWholesaleOpen(isOpen) {
           wholesalePanel.hidden = !isOpen;
+          modalQuantity.hidden = isOpen || selectedSizes.size === 0;
 
           retailPieces.forEach(piece => {
             piece.hidden = isOpen;
@@ -1606,31 +1702,21 @@ $socialLinks = array_filter([
         wholesaleButton.addEventListener("click", () => {
           const product = currentProduct;
           const lines = wholesaleLines();
-          const total = lines.reduce((sum, line) => sum + line.quantity, 0);
 
           if (!product || wholesaleButton.disabled) {
             return;
           }
 
-          const message = [
-            `Hola ${BUSINESS_NAME}, quiero hacer un pedido mayorista:`,
-            "",
-            `Producto: ${product.name}`,
-            `Código: ${product.code}`,
-            `Color: ${modalColorName.textContent}`,
-            ...lines.map(line => `Talla ${line.size}: ${line.quantity}`),
-            `Total: ${total} pares`,
-            `Precio mayorista: ${formatCordobas(product.wholesale_price)} c/u`,
-            `Total estimado: ${formatCordobas(total * product.wholesale_price)}`,
-            "",
-            "¿Está disponible?"
-          ].join("\n");
+          lines.forEach(line => {
+            addToCart(product, modalColorName.textContent, line.size, line.quantity, null, true);
+          });
 
-          window.open(
-            "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(message),
-            "_blank",
-            "noopener,noreferrer"
-          );
+          wholesaleSizes.querySelectorAll("input").forEach(input => {
+            input.value = "";
+          });
+
+          updateWholesaleSummary();
+          showCartAdded();
         });
 
 
@@ -1654,8 +1740,11 @@ $socialLinks = array_filter([
             true;
 
 
-          modalBuyButton.textContent =
-            "SELECCIONA UNA TALLA";
+                    modalBuyButton.textContent =
+            "SELECCIONA UNA O VARIAS TALLAS";
+
+          selectedSizes.clear();
+          renderSelectedSizes();
 
 
           const availableSizes =
@@ -1710,40 +1799,17 @@ $socialLinks = array_filter([
                 "click",
                 () => {
 
-                  modalSizeOptions
-                    .querySelectorAll(
-                      ".modal-size-button"
-                    )
-                    .forEach(
-                      sizeButton => {
+                  // Several sizes of the same model: each click toggles one.
+                  const key = String(item.size);
 
-                        sizeButton
-                          .classList
-                          .remove(
-                            "is-selected"
-                          );
+                  if (selectedSizes.has(key)) {
+                    selectedSizes.delete(key);
+                  } else {
+                    selectedSizes.set(key, { item: item, quantity: 1 });
+                  }
 
-                      }
-                    );
-
-
-                  button
-                    .classList
-                    .add(
-                      "is-selected"
-                    );
-
-
-                  modalSizeName.textContent =
-                    item.size;
-
-
-                  modalBuyButton.disabled =
-                    false;
-
-
-                  modalBuyButton.textContent =
-                    "COMPRAR";
+                  button.classList.toggle("is-selected", selectedSizes.has(key));
+                  renderSelectedSizes();
 
                 }
               );
@@ -1998,9 +2064,8 @@ $socialLinks = array_filter([
           modalWholesale.hidden =
             !product.wholesale;
 
+                    modalCartAdded.hidden = true;
           setWholesaleOpen(false);
-
-
           modalColorOptions.innerHTML =
             "";
 
@@ -2229,65 +2294,714 @@ $socialLinks = array_filter([
 
         /*
         |--------------------------------------------------------------------------
-        | WhatsApp Purchase
+        | Cart (carrito): several models, one WhatsApp message
         |--------------------------------------------------------------------------
+        |
+        | Lines live in this browser (localStorage). Prices follow the
+        | sale rules: a wholesale model gets its wholesale price when its
+        | pairs reach the minimum; otherwise the best current promotion
+        | (never stacked with wholesale) is estimated. First-purchase
+        | promotions are only mentioned, the shop confirms them.
+        |
         */
 
-        modalBuyButton.addEventListener(
-          "click",
-          () => {
+        const CART_KEY = "catalogCart:" + location.pathname;
 
-            if (
-              !currentProduct ||
-              modalBuyButton.disabled
-            ) {
+        const cartPanel = document.getElementById("cartPanel");
+        const cartLinesList = document.getElementById("cartLines");
+        const cartEmpty = document.getElementById("cartEmpty");
+        const cartSummary = document.getElementById("cartSummary");
+        const cartCustomer = document.getElementById("cartCustomer");
+        const cartFooter = document.getElementById("cartFooter");
+        const cartSent = document.getElementById("cartSent");
+        const cartFab = document.getElementById("cartFab");
+        const cartNameInput = document.getElementById("cartName");
+        const cartNoteInput = document.getElementById("cartNote");
+        const cartPhoneInput = document.getElementById("cartPhone");
+        const ORDER_URL = <?= json_encode(APP_BASE_URL . '/order-submit.php', JSON_UNESCAPED_SLASHES) ?>;
 
+        const money = value =>
+          CURRENCY_SYMBOL + Number(value).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+
+        function readCart() {
+          try {
+            const stored = JSON.parse(localStorage.getItem(CART_KEY) || "[]");
+            return Array.isArray(stored) ? stored : [];
+          } catch (error) {
+            return [];
+          }
+        }
+
+        let cart = readCart();
+
+        function saveCart() {
+          try {
+            localStorage.setItem(CART_KEY, JSON.stringify(cart));
+          } catch (error) {
+            // Private mode: the cart still works until the page closes.
+          }
+        }
+
+        // Refresh saved lines with today's prices and stock.
+        const catalogProducts = {};
+
+        cards.forEach(card => {
+          const product = getProductData(card);
+
+          if (product) {
+            catalogProducts[product.id] = product;
+          }
+        });
+
+        function sizeStock(product, colorName, size) {
+          const color = (product.colors || []).find(item => item.name === colorName);
+          const sizeItem = color ? (color.sizes || []).find(item => String(item.size) === String(size)) : null;
+
+          return sizeItem ? Number(sizeItem.stock) || 0 : 0;
+        }
+
+        cart = cart
+          .filter(line => catalogProducts[line.id])
+          .map(line => {
+            const product = catalogProducts[line.id];
+
+            return Object.assign({}, line, {
+              name: product.name,
+              code: product.code,
+              image: product.image,
+              price: product.price_value,
+              category_id: product.category_id,
+              wholesale_price: product.wholesale_price,
+              wholesale_min: product.wholesale_min,
+              stock: line.wholesale ? null : sizeStock(product, line.color, line.size)
+            });
+          })
+          .filter(line => line.wholesale || line.stock > 0)
+          .map(line => line.wholesale ? line : Object.assign(line, {
+            quantity: Math.min(line.quantity, line.stock)
+          }));
+
+        saveCart();
+
+        function addToCart(product, colorName, size, quantity, stock, isWholesale) {
+          const key = [product.id, colorName, size, isWholesale ? "w" : "r"].join("|");
+          const existing = cart.find(line => line.key === key);
+
+          quantity = Math.max(1, parseInt(quantity, 10) || 1);
+
+          if (existing) {
+            existing.quantity += quantity;
+          } else {
+            cart.push({
+              key: key,
+              id: product.id,
+              code: product.code,
+              name: product.name,
+              image: product.image,
+              color: colorName,
+              size: String(size),
+              quantity: quantity,
+              stock: isWholesale ? null : stock,
+              wholesale: Boolean(isWholesale),
+              price: product.price_value,
+              category_id: product.category_id,
+              wholesale_price: product.wholesale_price,
+              wholesale_min: product.wholesale_min
+            });
+          }
+
+          cart.forEach(line => {
+            if (!line.wholesale && line.stock !== null) {
+              line.quantity = Math.min(line.quantity, Math.max(1, line.stock));
+            }
+          });
+
+          cartSent.hidden = true;
+          saveCart();
+          renderCart();
+        }
+
+        function showCartAdded() {
+          modalCartAdded.hidden = false;
+          cartFab.classList.remove("is-bumped");
+          void cartFab.offsetWidth;
+          cartFab.classList.add("is-bumped");
+        }
+
+        /*
+        | Pricing
+        */
+
+        function promotionApplies(promotion, line) {
+          if (promotion.products && promotion.products.length > 0) {
+            return promotion.products.includes(String(line.code).trim().toLowerCase());
+          }
+
+          return promotion.categories.length === 0 ||
+            promotion.categories.includes(Number(line.category_id));
+        }
+
+        function promotionDiscount(promotion, lines) {
+          const units = [];
+
+          lines.forEach(line => {
+            if (line.price === null || !promotionApplies(promotion, line)) {
               return;
-
             }
 
+            for (let i = 0; i < line.quantity; i++) {
+              units.push(Number(line.price));
+            }
+          });
 
-            const size =
-              modalSizeName.textContent;
-
-
-            const color =
-              modalColorName.textContent;
-
-
-            const message = [
-              `Hola ${BUSINESS_NAME}, me interesa este producto:`,
-              "",
-              `Producto: ${currentProduct.name}`,
-              `Código: ${currentProduct.code}`,
-              `Color: ${color}`,
-              `Talla: ${size}`,
-              `Precio: ${currentProduct.price}`,
-              currentProduct.wholesale
-                ? `Precio ${currentProduct.wholesale.charAt(0).toLowerCase()}${currentProduct.wholesale.slice(1)}`
-                : "",
-              "",
-              "¿Está disponible?"
-            ]
-              .filter(Boolean)
-              .join("\n");
-
-
-            const whatsappUrl =
-              "https://wa.me/" + WHATSAPP_NUMBER + "?text=" +
-              encodeURIComponent(
-                message
-              );
-
-
-            window.open(
-              whatsappUrl,
-              "_blank",
-              "noopener,noreferrer"
-            );
-
+          if (promotion.type === "percent") {
+            return Math.round(units.reduce((sum, value) => sum + value, 0) * promotion.percent) / 100;
           }
-        );
+
+          const size = Number(promotion.bundle_qty);
+
+          if (size < 1 || units.length < size) {
+            return 0;
+          }
+
+          units.sort((a, b) => b - a);
+
+          const bundles = Math.floor(units.length / size);
+          const bundled = units.slice(0, bundles * size).reduce((sum, value) => sum + value, 0);
+
+          return Math.max(0, Math.round((bundled - bundles * promotion.bundle_price) * 100) / 100);
+        }
+
+        function cartPricing() {
+          const pairsByProduct = {};
+
+          cart.forEach(line => {
+            pairsByProduct[line.id] = (pairsByProduct[line.id] || 0) + line.quantity;
+          });
+
+          const pairs = cart.reduce((sum, line) => sum + line.quantity, 0);
+          const priced = cart.filter(line => line.price !== null || line.wholesale_price);
+          const unpriced = cart.filter(line => line.price === null && !line.wholesale_price);
+
+          const wholesaleOk = id => {
+            const line = cart.find(item => item.id === id);
+            return Boolean(line && line.wholesale_price) &&
+              pairsByProduct[id] >= Math.max(1, Number(line.wholesale_min) || 1);
+          };
+
+          const retailUnit = line => line.price !== null ? Number(line.price) : Number(line.wholesale_price);
+          const retailTotal = priced.reduce((sum, line) => sum + retailUnit(line) * line.quantity, 0);
+
+          // Option 1: wholesale prices for the models that reach the minimum.
+          const wholesaleTotal = priced.reduce((sum, line) =>
+            sum + (wholesaleOk(line.id) ? Number(line.wholesale_price) : retailUnit(line)) * line.quantity, 0);
+
+          // Option 2: the best promotion (not first purchase) on retail prices.
+          let bestPromotion = null;
+          let firstPurchase = null;
+
+          CART_PROMOTIONS.forEach(promotion => {
+            const discount = promotionDiscount(promotion, priced);
+
+            if (discount <= 0) {
+              return;
+            }
+
+            if (promotion.first_purchase_only) {
+              if (!firstPurchase || discount > firstPurchase.discount) {
+                firstPurchase = { promotion: promotion, discount: discount };
+              }
+            } else if (!bestPromotion || discount > bestPromotion.discount) {
+              bestPromotion = { promotion: promotion, discount: discount };
+            }
+          });
+
+          const promotionTotal = bestPromotion ? retailTotal - bestPromotion.discount : retailTotal;
+          const useWholesale = wholesaleTotal < retailTotal - 0.004 && wholesaleTotal <= promotionTotal;
+          const usePromotion = !useWholesale && bestPromotion !== null;
+          const total = useWholesale ? wholesaleTotal : promotionTotal;
+
+          const unitPrice = line =>
+            useWholesale && wholesaleOk(line.id) ? Number(line.wholesale_price) : retailUnit(line);
+
+          // Wholesale models still short of the minimum.
+          const wholesaleHints = [];
+
+          Object.keys(pairsByProduct).forEach(id => {
+            const line = cart.find(item => String(item.id) === id);
+            const minimum = Math.max(1, Number(line.wholesale_min) || 1);
+
+            const missing = minimum - pairsByProduct[id];
+            const askedWholesale = cart.some(item => String(item.id) === id && item.wholesale);
+
+            if (line.wholesale_price && missing > 0 && askedWholesale) {
+              wholesaleHints.push(
+                `${line.name}: ${missing === 1 ? "falta 1 par" : `faltan ${missing} pares`} para precio mayorista (${money(line.wholesale_price)} c/u)`
+              );
+            }
+          });
+
+          const firstPurchaseHint =
+            firstPurchase && retailTotal - firstPurchase.discount < total - 0.004
+              ? firstPurchase
+              : null;
+
+          return {
+            pairs, retailTotal, total, unpriced, useWholesale, usePromotion,
+            bestPromotion, firstPurchaseHint, wholesaleHints, unitPrice,
+            wholesaleOk
+          };
+        }
+
+        /*
+        | Render
+        */
+
+        function lineElement(line, pricing) {
+          const item = document.createElement("li");
+          const unit = line.price === null && !line.wholesale_price ? null : pricing.unitPrice(line);
+          const atLimit = !line.wholesale && line.stock !== null && line.quantity >= line.stock;
+
+          item.className = "cart-line";
+          item.innerHTML = `
+            <img class="cart-line-image" alt="">
+            <div class="cart-line-info">
+              <p class="cart-line-code"></p>
+              <h3 class="cart-line-name"></h3>
+              <p class="cart-line-meta"></p>
+              <div class="cart-line-bottom">
+                <div class="cart-stepper">
+                  <button type="button" data-cart-step="-1" aria-label="Menos">−</button>
+                  <span class="cart-stepper-value"></span>
+                  <button type="button" data-cart-step="1" aria-label="Más"></button>
+                </div>
+                <p class="cart-line-price"></p>
+              </div>
+            </div>
+            <button class="cart-line-remove" type="button" data-cart-remove aria-label="Quitar">×</button>`;
+
+          item.dataset.key = line.key;
+          item.querySelector(".cart-line-image").src = line.image;
+          item.querySelector(".cart-line-code").textContent = line.code;
+          item.querySelector(".cart-line-name").textContent = line.name;
+          item.querySelector(".cart-line-meta").textContent =
+            `Color: ${line.color} · Talla: ${line.size}` + (line.wholesale ? " · Al por mayor" : "");
+          item.querySelector(".cart-stepper-value").textContent = line.quantity;
+
+          const plus = item.querySelector('[data-cart-step="1"]');
+          plus.textContent = "+";
+          plus.disabled = atLimit;
+          plus.title = atLimit ? "No hay más pares en esta talla" : "";
+
+          item.querySelector(".cart-line-price").innerHTML = unit === null
+            ? "Precio a consultar"
+            : `<strong>${money(unit * line.quantity)}</strong><small>${line.quantity} × ${money(unit)}</small>`;
+
+          return item;
+        }
+
+        function renderCart() {
+          const pricing = cartPricing();
+          const isEmpty = cart.length === 0;
+
+          ["cartCount", "cartFabCount"].forEach(id => {
+            const badge = document.getElementById(id);
+            badge.textContent = pricing.pairs;
+            badge.hidden = isEmpty;
+          });
+
+          cartFab.hidden = isEmpty;
+          cartEmpty.hidden = !isEmpty;
+          cartSummary.hidden = isEmpty;
+          cartCustomer.hidden = isEmpty;
+          cartFooter.hidden = isEmpty;
+
+          cartLinesList.innerHTML = "";
+          cart.forEach(line => cartLinesList.appendChild(lineElement(line, pricing)));
+
+          if (isEmpty) {
+            return;
+          }
+
+          const rows = [
+            ["Pares", String(pricing.pairs)],
+            ["Subtotal", money(pricing.retailTotal)]
+          ];
+
+          if (pricing.useWholesale) {
+            rows.push(["Precio mayorista", "−" + money(pricing.retailTotal - pricing.total)]);
+          } else if (pricing.usePromotion) {
+            rows.push([`Promo: ${pricing.bestPromotion.promotion.name}`, "−" + money(pricing.bestPromotion.discount)]);
+          }
+
+          const notes = [...pricing.wholesaleHints];
+
+          if (pricing.firstPurchaseHint) {
+            notes.push(
+              `¿Es tu primera compra? Con "${pricing.firstPurchaseHint.promotion.name}" ahorras ${money(pricing.firstPurchaseHint.discount)}. La tienda lo confirma.`
+            );
+          }
+
+          if (pricing.unpriced.length > 0) {
+            notes.push("Algunos modelos tienen precio a consultar y no están en el total.");
+          }
+
+          cartSummary.innerHTML = "";
+
+          rows.forEach(([label, value]) => {
+            const row = document.createElement("p");
+            row.className = "cart-summary-row";
+            row.innerHTML = "<span></span><span></span>";
+            row.children[0].textContent = label;
+            row.children[1].textContent = value;
+            cartSummary.appendChild(row);
+          });
+
+          const totalRow = document.createElement("p");
+          totalRow.className = "cart-summary-row cart-summary-total";
+          totalRow.innerHTML = "<span>Total estimado</span><strong></strong>";
+          totalRow.querySelector("strong").textContent = money(pricing.total);
+          document.getElementById("cartFooterTotal").textContent = money(pricing.total);
+          cartSummary.appendChild(totalRow);
+
+          notes.forEach(text => {
+            const note = document.createElement("p");
+            note.className = "cart-summary-note";
+            note.textContent = text;
+            cartSummary.appendChild(note);
+          });
+        }
+
+        /*
+        | WhatsApp message
+        */
+
+        function cartMessage(orderNumber) {
+          const pricing = cartPricing();
+          const lines = [
+            orderNumber
+              ? `Hola ${BUSINESS_NAME}, quiero hacer este pedido (${orderNumber}):`
+              : `Hola ${BUSINESS_NAME}, quiero hacer este pedido:`,
+            ""
+          ];
+
+          cart.forEach((line, index) => {
+            const unit = line.price === null && !line.wholesale_price ? null : pricing.unitPrice(line);
+
+            lines.push(`${index + 1}. ${line.name} (${line.code})`);
+            lines.push(`   Color: ${line.color} · Talla: ${line.size} · Cantidad: ${line.quantity}`);
+            lines.push(unit === null
+              ? "   Precio: a consultar"
+              : `   ${money(unit)} c/u = ${money(unit * line.quantity)}` +
+                (pricing.useWholesale && pricing.wholesaleOk(line.id) ? " (mayorista)" : ""));
+          });
+
+          lines.push("");
+          lines.push(`Pares: ${pricing.pairs}`);
+          lines.push(`Subtotal: ${money(pricing.retailTotal)}`);
+
+          if (pricing.useWholesale) {
+            lines.push(`Precio mayorista: −${money(pricing.retailTotal - pricing.total)}`);
+          } else if (pricing.usePromotion) {
+            lines.push(`Promoción "${pricing.bestPromotion.promotion.name}": −${money(pricing.bestPromotion.discount)}`);
+          }
+
+          lines.push(`Total estimado: ${money(pricing.total)}`);
+
+          if (pricing.firstPurchaseHint) {
+            lines.push(`Es mi primera compra, ¿aplica "${pricing.firstPurchaseHint.promotion.name}"?`);
+          }
+
+          const name = cartNameInput.value.trim();
+          const phone = cartPhoneInput.value.trim();
+          const note = cartNoteInput.value.trim();
+
+          if (name || phone || note) {
+            lines.push("");
+          }
+
+          if (name) {
+            lines.push(`Nombre: ${name}`);
+          }
+
+          if (phone) {
+            lines.push(`Teléfono: ${phone}`);
+          }
+
+          if (note) {
+            lines.push(`Nota: ${note}`);
+          }
+
+          lines.push("");
+          lines.push("¿Está disponible?");
+
+          return lines.join("\n");
+        }
+
+        /*
+        | Events
+        */
+
+        function openCart() {
+          renderCart();
+          cartPanel.hidden = false;
+          document.body.classList.add("modal-open");
+        }
+
+        function closeCart() {
+          cartPanel.hidden = true;
+
+          if (modal.hidden) {
+            document.body.classList.remove("modal-open");
+          }
+        }
+
+        function clearCart() {
+          cart = [];
+          cartSent.hidden = true;
+          saveCart();
+          renderCart();
+        }
+
+        document.getElementById("cartToggle").addEventListener("click", openCart);
+        cartFab.addEventListener("click", openCart);
+
+        document.addEventListener("click", event => {
+          if (event.target.closest("[data-open-cart]")) {
+            closeModal();
+            openCart();
+            return;
+          }
+
+          if (event.target.closest("[data-close-cart]")) {
+            closeCart();
+            return;
+          }
+
+          const lineItem = event.target.closest(".cart-line");
+
+          if (!lineItem) {
+            return;
+          }
+
+          const line = cart.find(item => item.key === lineItem.dataset.key);
+          const step = event.target.closest("[data-cart-step]");
+
+          if (!line) {
+            return;
+          }
+
+          if (event.target.closest("[data-cart-remove]")) {
+            cart = cart.filter(item => item !== line);
+          } else if (step) {
+            line.quantity += Number(step.dataset.cartStep);
+
+            if (!line.wholesale && line.stock !== null) {
+              line.quantity = Math.min(line.quantity, line.stock);
+            }
+
+            if (line.quantity < 1) {
+              cart = cart.filter(item => item !== line);
+            }
+          } else {
+            return;
+          }
+
+          saveCart();
+          renderCart();
+        });
+
+        document.addEventListener("keydown", event => {
+          if (event.key === "Escape" && !cartPanel.hidden) {
+            closeCart();
+          }
+        });
+
+        document.getElementById("cartClear").addEventListener("click", () => {
+          if (confirm("¿Vaciar el carrito?")) {
+            clearCart();
+          }
+        });
+
+        document.getElementById("cartClearSent").addEventListener("click", clearCart);
+
+        // Saves the order (Administración > Pedidos) and then opens
+        // WhatsApp with its number. If saving fails or takes more than
+        // 6 seconds, WhatsApp opens anyway without a number.
+        const cartSendButton = document.getElementById("cartSend");
+
+        async function saveOrder() {
+          const controller = "AbortController" in window ? new AbortController() : null;
+          const timer = controller ? setTimeout(() => controller.abort(), 6000) : null;
+
+          try {
+            const response = await fetch(ORDER_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                name: cartNameInput.value.trim(),
+                phone: cartPhoneInput.value.trim(),
+                note: cartNoteInput.value.trim(),
+                website: document.getElementById("cartWebsite").value,
+                lines: cart.map(line => ({
+                  id: line.id,
+                  color: line.color,
+                  size: line.size,
+                  quantity: line.quantity,
+                  wholesale: line.wholesale
+                }))
+              }),
+              signal: controller ? controller.signal : undefined
+            });
+            const result = await response.json();
+
+            if (response.status === 422 && result.error) {
+              return { error: result.error };
+            }
+
+            return result.ok ? { number: result.number } : {};
+          } catch (error) {
+            return {};
+          } finally {
+            if (timer) {
+              clearTimeout(timer);
+            }
+          }
+        }
+
+        cartSendButton.addEventListener("click", async () => {
+          if (cart.length === 0 || cartSendButton.disabled) {
+            return;
+          }
+
+          if (!WHATSAPP_NUMBER) {
+            alert("La tienda todavía no configuró su número de WhatsApp.");
+            return;
+          }
+
+          // Opened now (inside the tap) so phones do not block it.
+          const whatsappWindow = window.open("", "_blank");
+
+          cartSendButton.disabled = true;
+          cartSendButton.textContent = "GUARDANDO PEDIDO...";
+
+          const saved = await saveOrder();
+
+          cartSendButton.disabled = false;
+          cartSendButton.textContent = "ENVIAR PEDIDO POR WHATSAPP";
+
+          if (saved.error) {
+            if (whatsappWindow) {
+              whatsappWindow.close();
+            }
+
+            alert(saved.error);
+            return;
+          }
+
+          const url = "https://wa.me/" + WHATSAPP_NUMBER + "?text=" + encodeURIComponent(cartMessage(saved.number));
+
+          if (whatsappWindow) {
+            whatsappWindow.opener = null;
+            whatsappWindow.location.href = url;
+          } else {
+            window.location.href = url;
+          }
+
+          cartSent.hidden = false;
+        });
+
+        // Retail: one quantity per chosen size and "AGREGAR AL CARRITO".
+        function renderSelectedSizes() {
+          const lines = Array.from(selectedSizes.values());
+          const pairs = lines.reduce((sum, line) => sum + line.quantity, 0);
+
+          modalSizeLines.innerHTML = "";
+
+          lines.forEach(line => {
+            const stock = Math.max(1, Number(line.item.stock) || 1);
+            const row = document.createElement("div");
+
+            row.className = "modal-size-line";
+            row.dataset.size = String(line.item.size);
+            row.innerHTML = `
+              <span class="modal-size-line-name"></span>
+              <div class="cart-stepper">
+                <button type="button" data-size-step="-1" aria-label="Menos">−</button>
+                <span class="cart-stepper-value"></span>
+                <button type="button" data-size-step="1" aria-label="Más">+</button>
+              </div>`;
+            row.querySelector(".modal-size-line-name").textContent = `Talla ${line.item.size}`;
+            row.querySelector(".cart-stepper-value").textContent = line.quantity;
+            row.querySelector('[data-size-step="1"]').disabled = line.quantity >= stock;
+            modalSizeLines.appendChild(row);
+          });
+
+          modalQuantity.hidden = lines.length === 0 || !wholesalePanel.hidden;
+          modalSizeName.textContent = lines.length === 0
+            ? "Selecciona"
+            : lines.map(line => line.item.size).join(", ");
+          modalBuyButton.disabled = lines.length === 0;
+          modalBuyButton.textContent = lines.length === 0
+            ? "SELECCIONA UNA O VARIAS TALLAS"
+            : `AGREGAR AL CARRITO · ${pairs} ${pairs === 1 ? "PAR" : "PARES"}`;
+        }
+
+        modalSizeLines.addEventListener("click", event => {
+          const step = event.target.closest("[data-size-step]");
+          const row = event.target.closest(".modal-size-line");
+
+          if (!step || !row) {
+            return;
+          }
+
+          const line = selectedSizes.get(row.dataset.size);
+          const stock = Math.max(1, Number(line.item.stock) || 1);
+
+          line.quantity += Number(step.dataset.sizeStep);
+
+          if (line.quantity < 1) {
+            selectedSizes.delete(row.dataset.size);
+            modalSizeOptions.querySelectorAll(".modal-size-button").forEach(button => {
+              if (button.textContent.trim() === row.dataset.size) {
+                button.classList.remove("is-selected");
+              }
+            });
+          } else {
+            line.quantity = Math.min(line.quantity, stock);
+          }
+
+          renderSelectedSizes();
+        });
+
+        modalBuyButton.addEventListener("click", () => {
+          if (!currentProduct || modalBuyButton.disabled || selectedSizes.size === 0) {
+            return;
+          }
+
+          selectedSizes.forEach(line => {
+            addToCart(
+              currentProduct,
+              modalColorName.textContent,
+              line.item.size,
+              line.quantity,
+              Math.max(1, Number(line.item.stock) || 1),
+              false
+            );
+          });
+
+          selectedSizes.clear();
+          modalSizeOptions.querySelectorAll(".modal-size-button").forEach(button => {
+            button.classList.remove("is-selected");
+          });
+          renderSelectedSizes();
+          showCartAdded();
+        });
+
+        renderCart();
 
 
         /*

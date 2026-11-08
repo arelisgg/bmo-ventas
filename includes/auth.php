@@ -164,7 +164,7 @@ function admin_role_sections(): array
 {
     return [
         'owner' => ['*'],
-        'seller' => ['dashboard', 'products', 'inventory', 'sales', 'cash', 'workshop'],
+        'seller' => ['dashboard', 'products', 'inventory', 'orders', 'sales', 'cash', 'workshop'],
         'warehouse' => ['dashboard', 'products', 'categories', 'inventory', 'workshop'],
     ];
 }

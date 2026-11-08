@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../config/database.php';
 require_once __DIR__ . '/../../includes/auth.php';
 require_once __DIR__ . '/../../includes/sales-functions.php';
 require_once __DIR__ . '/../../includes/workshop-functions.php';
+require_once __DIR__ . '/../../includes/order-functions.php';
 require_once __DIR__ . '/../sales/_layout.php';
 
 require_admin();
@@ -46,6 +47,17 @@ if (
     sales_tables_exist($pdo)
 ) {
     $form = workshop_form_from_sale($pdo, $saleId) ?? $form;
+}
+
+/*
+| From a catalog order (?from_order=ID, admin/orders/). Saving links the
+| order to the new workshop order.
+*/
+$fromOrderId = filter_var($_GET['from_order'] ?? $_POST['from_order'] ?? null, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+$fromOrder = $tablesReady && $fromOrderId !== false && orders_tables_exist($pdo) ? load_order($pdo, $fromOrderId) : null;
+
+if ($fromOrder !== null && $_SERVER['REQUEST_METHOD'] !== 'POST') {
+    $form = order_workshop_form($fromOrder);
 }
 
 
@@ -142,6 +154,10 @@ if ($tablesReady && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+            if ($fromOrder !== null) {
+                link_order_to_workshop($pdo, (int) $fromOrder['id'], $orderId);
+            }
+
             $pdo->commit();
 
             header('Location: ' . APP_BASE_URL . '/admin/workshop/view.php?id=' . $orderId . '&created=1');
@@ -202,6 +218,9 @@ render_sales_layout_start('Nuevo pedido al taller', 'workshop');
     <form class="workshop-form" method="post" enctype="multipart/form-data" data-workshop-form>
         <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
         <input type="hidden" name="sale_id" value="<?= e($form['sale_id']) ?>">
+        <?php if ($fromOrder !== null): ?>
+            <input type="hidden" name="from_order" value="<?= (int) $fromOrder['id'] ?>">
+        <?php endif; ?>
         <input type="hidden" name="sale_number" value="<?= e($form['sale_number']) ?>">
 
         <section class="form-section">
